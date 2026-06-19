@@ -320,6 +320,18 @@ input[type=date]:focus { outline: none; border-color: var(--accent-blue); }
     </details>
   </div>
 
+  <!-- ── Regime Intelligence ── -->
+  <div id="regimeScorePanel" class="hidden card p-6 space-y-4">
+    <div class="flex items-center gap-3">
+      <span class="text-xl">🏆</span>
+      <div>
+        <h2 class="text-base font-bold text-slate-900">Regime Intelligence</h2>
+        <p class="text-[11px] text-slate-400 font-mono mt-0.5">All outcomes pooled per regime umbrella · Velocity Score + Bayesian shrinkage · <span class="text-amber-600 font-semibold">informational only — not in MasterP</span></p>
+      </div>
+    </div>
+    <div id="regimeScoreCards" class="grid grid-cols-3 gap-4"></div>
+  </div>
+
   <!-- ── Inspector ── -->
   <div id="inspectorPanel" class="card p-6 hidden">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -529,6 +541,57 @@ window._auditCache={anchorClose:ac,atr14,atrSpotNow,atrSpotP33,atrSpotP50,atrSpo
 const dateStr=rawRows[triggerIdx].computedDateStr;const liveRow={Date:dateStr,Close:ac,Stage:stage,Zone:zone,RawRegime:rawRegime,RegimeState:regimeState,RRCState:rrcState,BFQState:bfqState,ExpansionHit:null,BlastDay:null,VelWeight:null,HasFutureData:false,IsLiveBar:true};const existing=dateLookupMap[dateStr];if(!existing||!existing.HasFutureData)dateLookupMap[dateStr]=liveRow;return liveRow;}
 function getPureMeanT2B(outcomes){let hits=outcomes.filter(o=>o.hit===1&&o.blastDay>0);if(!hits.length)return{meanT2B:null,sampleSize:0};return{meanT2B:hits.reduce((a,o)=>a+o.blastDay,0)/hits.length,sampleSize:hits.length};}
 function getProbabilityBadge(relPct,hasFullData){if(!hasFullData||relPct===null||relPct===undefined)return{label:"LOW SAMPLE",cls:"bg-slate-100 text-slate-500 border border-slate-300"};if(relPct<NPS_CONFIG.STAND_DOWN_THRESHOLD)return{label:"STAND DOWN",cls:"bg-red-100 text-red-700 border border-red-300"};if(relPct>=0.75)return{label:"HIGH CONVICTION",cls:"bg-emerald-100 text-emerald-700 border border-emerald-300"};if(relPct>=0.50)return{label:"FAVORABLE",cls:"bg-blue-100 text-blue-700 border border-blue-300"};if(relPct>=0.35)return{label:"NEUTRAL",cls:"bg-amber-100 text-amber-700 border border-amber-300"};return{label:"WEAK",cls:"bg-orange-100 text-orange-700 border border-orange-300"};}
+
+function renderRegimeIntelligence(activeRegime){
+  const panel=document.getElementById('regimeScorePanel');
+  const cont=document.getElementById('regimeScoreCards');
+  if(!panel||!cont)return;
+  panel.classList.remove('hidden');
+  const RLABELS={"HighSptR":"High Vol / Wide","FlatSptR":"Flat / Neutral","LowSptR":"Low Vol / Coil"};
+  const RCOLS={"HighSptR":"#ea580c","FlatSptR":"#2563eb","LowSptR":"#16a34a"};
+  // Compute shrunk vel score per regime using the umbrella outcomes bucket
+  const scores={};
+  REGIME_KEYS.forEach(r=>{
+    const o=(analyticsStats.regime[r]||{outcomes:[]}).outcomes;
+    const vs=bucketVelocityScore(o);
+    const t2b=getPureMeanT2B(o);
+    const n=o.length;
+    const lambda=n/(n+NPS_CONFIG.BAYESIAN_K);
+    const adjScore=n>0?lambda*vs.score:-Infinity;
+    const hits=o.filter(x=>x.blastDay>0).length;
+    scores[r]={vs,t2b,n,lambda,adjScore,hitRate:n>0?hits/n*100:null};
+  });
+  const best=REGIME_KEYS.reduce((a,b)=>scores[a].adjScore>scores[b].adjScore?a:b);
+  cont.innerHTML=REGIME_KEYS.map(r=>{
+    const s=scores[r];const col=RCOLS[r]||"#94a3b8";
+    const isBest=r===best;const isActive=r===activeRegime;
+    const bdr=isActive?"border:2px solid #a78bfa;box-shadow:0 0 0 3px #ede9fe;":isBest?"border:2px solid #f59e0b;box-shadow:0 0 0 3px #fef3c7;":"border:1px solid #e2e8f0;";
+    const bestTag=isBest?`<div style="background:#fef9ec;border:1px solid #fcd34d;color:#92400e;font-size:9px;font-weight:900;padding:2px 8px;border-radius:999px;display:inline-block;margin-bottom:6px">⭐ BEST REGIME</div>`:`<div style="height:22px;margin-bottom:6px"></div>`;
+    const activeTag=isActive?` <span style="background:#ede9fe;color:#7c3aed;font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px;vertical-align:middle">◀ ACTIVE</span>`:'';
+    const hitCol=s.hitRate>=70?"#16a34a":s.hitRate>=50?"#d97706":"#dc2626";
+    return`<div style="background:#f8fafc;border-radius:12px;padding:16px 12px;text-align:center;${bdr}">
+      ${bestTag}
+      <div style="font-size:13px;font-weight:700;color:${col};margin-bottom:2px">${RLABELS[r]}${activeTag}</div>
+      <div style="font-size:10px;color:#94a3b8;margin-bottom:10px;font-family:monospace">${r}</div>
+      <div style="font-size:28px;font-weight:900;color:${hitCol}">${s.hitRate!==null?s.hitRate.toFixed(0)+"%":"—"}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-top:10px">
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:6px 4px">
+          <div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.05em">n</div>
+          <div style="font-size:15px;font-weight:800;color:#1e293b">${s.n}</div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:6px 4px">
+          <div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.05em">T2B</div>
+          <div style="font-size:15px;font-weight:800;color:#d97706">${s.t2b.meanT2B!==null?s.t2b.meanT2B.toFixed(1)+"d":"—"}</div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:6px 4px">
+          <div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.05em">VelS</div>
+          <div style="font-size:15px;font-weight:800;color:#7c3aed">${s.n>0?(s.vs.score*100).toFixed(1):"—"}</div>
+        </div>
+      </div>
+      <div style="font-size:9px;color:#94a3b8;margin-top:8px;font-family:monospace">λ=${s.lambda.toFixed(2)} · ⚡${s.vs.fast} ⏱${s.vs.mid} 🐢${s.vs.slow} ❌${s.vs.miss}</div>
+    </div>`;
+  }).join('');
+}}
 function getAllBucketScores(){const MIN_S=5;let scores=[];REGIME_KEYS.forEach(r=>{STAGE_KEYS.forEach(s=>{const o=((analyticsStats.conditionalStage[r]||{})[s]||{outcomes:[]}).outcomes;if(o.length>=MIN_S)scores.push(bucketVelocityScore(o).score);});ZONE_KEYS.forEach(z=>{const o=((analyticsStats.conditionalZone[r]||{})[z]||{outcomes:[]}).outcomes;if(o.length>=MIN_S)scores.push(bucketVelocityScore(o).score);});RRC_KEYS.forEach(rrc=>{const o=((analyticsStats.conditionalRRC[r]||{})[rrc]||{outcomes:[]}).outcomes;if(o.length>=MIN_S)scores.push(bucketVelocityScore(o).score);});WEEKDAY_KEYS.forEach(wd=>{const o=((analyticsStats.conditionalWeekday[r]||{})[wd]||{outcomes:[]}).outcomes;if(o.length>=MIN_S)scores.push(bucketVelocityScore(o).score);});BFQ_KEYS.forEach(bfq=>{const o=((analyticsStats.conditionalBFQ[r]||{})[bfq]||{outcomes:[]}).outcomes;if(o.length>=MIN_S)scores.push(bucketVelocityScore(o).score);});});return scores;}
 function getPercentileRank(value,data){if(!data||!data.length)return 50;return(data.filter(v=>v<value).length/data.length)*100;}
 function rebuildStatsUpToDate(targetDate){analyticsStats.stage={1:{outcomes:[]},2:{outcomes:[]},3:{outcomes:[]},4:{outcomes:[]}};analyticsStats.zone={"Lower Zone":{outcomes:[]},"Middle Zone":{outcomes:[]},"Upper Zone":{outcomes:[]}};analyticsStats.regime={"HighSptR":{outcomes:[]},"FlatSptR":{outcomes:[]},"LowSptR":{outcomes:[]}};initConditionalStats();
@@ -568,7 +631,8 @@ setHitEl('traderStageHit','traderStageN',calcHR(csO));setHitEl('traderZoneHit','
 const allHRs=[calcHR(csO),calcHR(czO),calcHR(crO),calcHR(cwO),calcHR(cbO)].filter(Boolean);const combEl=document.getElementById('traderHitRate');if(allHRs.length){const totalN=allHRs.reduce((s,h)=>s+h.n,0);const comb=totalN>0?allHRs.reduce((s,h)=>s+h.rate*h.n,0)/totalN:allHRs.reduce((s,h)=>s+h.rate,0)/allHRs.length;combEl.innerText=comb.toFixed(0)+"%";combEl.style.color=comb>=60?hitColors.good:comb>=40?hitColors.neutral:hitColors.bad;}else{combEl.innerText="—";combEl.style.color="";}
 const validT2Bs=[getPureMeanT2B(csO),getPureMeanT2B(czO),getPureMeanT2B(crO),getPureMeanT2B(cwO),getPureMeanT2B(cbO),getPureMeanT2B(cwomO)].filter(t=>t.meanT2B!==null);const hEl=document.getElementById('masterBlastHorizon');if(validT2Bs.length){hEl.innerText=(validT2Bs.reduce((s,t)=>s+t.meanT2B,0)/validT2Bs.length).toFixed(1)+"d";}else hEl.innerText="—";
 document.getElementById('pceWinRateText').innerText=`S:${prob.stageContrib.toFixed(0)}p Z:${prob.zoneContrib.toFixed(0)}p RRC:${prob.rrcContrib.toFixed(0)}p Wd:${prob.weekdayContrib.toFixed(0)}p BFQ:${prob.bfqContrib.toFixed(0)}p WOM:${prob.womContrib.toFixed(0)}p λ=${prob.lambda.toFixed(2)}`;
-renderConditionalMatrices(d.RegimeState,d.Stage,d.Zone,d.RRCState,inspectWd,d.BFQState,inspectWOM);}
+renderConditionalMatrices(d.RegimeState,d.Stage,d.Zone,d.RRCState,inspectWd,d.BFQState,inspectWOM);
+renderRegimeIntelligence(d.RegimeState);}
 
 function renderConditionalMatrices(activeRegime,activeStage,activeZone,activeRRC,activeWeekday,activeBFQ,activeWOM){
   const STAGE_LABELS={4:"All Compressed",3:"Any 2",2:"1 Compressed",1:"No Compression"};
@@ -633,4 +697,4 @@ function exportCSV(){if(!globalProcessedData.length)return;const flattened=globa
 function copyAuditToClipboard(){const btn=document.getElementById('auditCopyBtn');try{const lines=[];const sep="─".repeat(52);const ts=new Date().toISOString().replace('T',' ').slice(0,19)+' UTC';lines.push("═".repeat(52));lines.push("  NPS AUDIT SNAPSHOT · "+ts);lines.push("═".repeat(52));lines.push("");lines.push("LIVE SIGNAL");lines.push(sep);const ac=window._auditCache||{};const ap=ac.prob||{};lines.push("Zone             : "+(document.getElementById('pZoneContext')?.innerText||'—'));lines.push("Stage            : "+(document.getElementById('pStageContext')?.innerText||'—'));lines.push("RRC              : "+(document.getElementById('pRRCContext')?.innerText||'—'));lines.push("BFQ              : "+(document.getElementById('pBFQContext')?.innerText||'—'));lines.push("Regime           : "+(document.getElementById('pRegimeContext')?.innerText||'—'));lines.push("Anchor Close     : "+(ac.anchorClose!=null?ac.anchorClose.toFixed(2):'—'));lines.push("ATR14            : "+(ac.atr14!=null?ac.atr14.toFixed(4):'—'));lines.push("ATR/Spot         : "+(ac.atrSpotNow!=null?(ac.atrSpotNow*100).toFixed(4)+'%':'—'));lines.push("");lines.push("MasterP Score    : "+(ap.masterP||'—')+"%");lines.push("Relative Rank    : "+(ap.relPct||'—'));lines.push("Signal Badge     : "+(ap.badge||'—'));lines.push("Blast Horizon    : "+(document.getElementById('masterBlastHorizon')?.innerText||'—'));lines.push("");lines.push("BACKTEST SUMMARY");lines.push(sep);const total=globalProcessedData.length;if(total>0){const hits=globalProcessedData.filter(r=>r.ExpansionHit==1).length;lines.push("Total Anchor Bars: "+total);lines.push("Expansion Hits   : "+hits+" ("+(hits/total*100).toFixed(1)+"%)");lines.push("MasterP Range    : Min="+historicalScoreBounds.min.toFixed(1)+"% Max="+historicalScoreBounds.max.toFixed(1)+"%");}lines.push("");lines.push("═".repeat(52));lines.push("  END OF AUDIT");lines.push("═".repeat(52));const text=lines.join('\n');navigator.clipboard.writeText(text).then(()=>{btn.innerText='✅ Copied!';setTimeout(()=>{btn.innerText='📋 Copy Audit';},2000);}).catch(()=>{const ta=document.createElement('textarea');ta.value=text;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);btn.innerText='✅ Copied!';setTimeout(()=>{btn.innerText='📋 Copy Audit';},2000);});}catch(err){alert('Audit error: '+err.message);btn.innerText='📋 Copy Audit';}}
 </script>
 </body>
-</html>
+    </html>
