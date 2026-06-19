@@ -553,24 +553,66 @@ document.getElementById('pceWinRateText').innerText=`S:${prob.stageContrib.toFix
 renderConditionalMatrices(d.RegimeState,d.Stage,d.Zone,d.RRCState,inspectWd,d.BFQState,inspectWOM);}
 
 function renderConditionalMatrices(activeRegime,activeStage,activeZone,activeRRC,activeWeekday,activeBFQ,activeWOM){
-const REGIME_META={"HighSptR":{color:"text-orange-600",stripe:"bg-orange-400",label:"High Vol / Wide",sub:`ATR/Spot > P66 (${(atrSpotP66*100).toFixed(2)}%) · Momentum / Blast-Ready`},"FlatSptR":{color:"text-blue-600",stripe:"bg-blue-400",label:"Flat / Neutral Vol",sub:`ATR/Spot P33–P66 (${(atrSpotP33*100).toFixed(2)}%–${(atrSpotP66*100).toFixed(2)}%)`},"LowSptR":{color:"text-emerald-600",stripe:"bg-emerald-400",label:"Low Vol / Coil",sub:`ATR/Spot < P33 (${(atrSpotP33*100).toFixed(2)}%) · Deep Compression`}};
-const STAGE_LABELS={4:"All Compressed",3:"Any 2",2:"1 Compressed",1:"No Compression"};
-function hitColor(r){if(r===null)return"text-slate-400";return r>=70?"text-emerald-600":r>=50?"text-amber-600":"text-red-500";}
-function hitBg(r){if(r===null)return"bg-white border-slate-200";return r>=70?"bg-emerald-50 border-emerald-200":r>=50?"bg-amber-50 border-amber-200":"bg-red-50 border-red-200";}
-function buildCard(outcomes,labelMain,labelSub,isActive){const vs=bucketVelocityScore(outcomes);const t2b=getPureMeanT2B(outcomes);const n=outcomes.length;const hits=outcomes.filter(o=>o.blastDay>0).length;const hitRate=n>0?hits/n*100:null;const t2bStr=t2b.meanT2B!==null?t2b.meanT2B.toFixed(1)+"d":"—";const hitStr=hitRate!==null?hitRate.toFixed(0)+"%":"—";const activeCls=isActive?"matrix-bucket active ring-2 ring-purple-400":"matrix-bucket";
-if(n===0)return`<div class="matrix-bucket flex-1 min-w-0 text-center opacity-40"><div class="text-xs font-bold text-slate-500 truncate">${labelMain}</div><div class="text-[10px] text-slate-400 truncate">${labelSub}</div><div class="text-lg font-black text-slate-300 mt-1">—</div><div class="text-[10px] text-slate-400">no data</div></div>`;
-return`<div class="${activeCls} flex-1 min-w-0 text-center"><div class="text-xs font-bold text-slate-700 truncate">${labelMain}</div><div class="text-[10px] text-slate-400 truncate mb-1">${labelSub}</div><div class="text-2xl font-black leading-none ${hitColor(hitRate)}">${hitStr}</div><div class="flex items-center justify-between mt-2"><span class="text-[10px] text-amber-600 font-mono font-bold">⏱ ${t2bStr}</span><span class="text-[10px] text-slate-400 font-mono">n=${n}</span></div></div>`;}
-function buildSection(containerId,bucketKeys,condObj,labelFn,subFn,activeBucket){const cont=document.getElementById(containerId);if(!cont)return;cont.innerHTML="";REGIME_KEYS.forEach(r=>{const meta=REGIME_META[r]||{color:"text-slate-600",stripe:"bg-slate-400",label:r,sub:""};const isAR=r===activeRegime;const dim=(!isAR&&activeRegime)?"opacity-50":"";let cardsHtml=bucketKeys.map(k=>{const o=((condObj[r]||{})[k]||{outcomes:[]}).outcomes;const isActive=isAR&&k===activeBucket;return buildCard(o,labelFn(k),subFn(k),isActive);}).join('');cont.innerHTML+=`<div class="${dim} transition-opacity"><div class="flex items-center gap-3 mb-3"><div class="regime-stripe ${isAR?'bg-purple-500':meta.stripe}"></div><div><div class="text-sm font-bold ${isAR?'text-purple-700':meta.color}">${meta.label}${isAR?' ◀ ACTIVE':''}</div><div class="text-[10px] text-slate-400 font-mono">${meta.sub}</div></div></div><div class="flex gap-2">${cardsHtml}</div></div>`;});}
-buildSection('regimeStageMatrixCards',STAGE_KEYS,analyticsStats.conditionalStage,k=>`S${k}`,k=>STAGE_LABELS[k]||"",activeStage);
-buildSection('regimeZoneMatrixCards',ZONE_KEYS,analyticsStats.conditionalZone,k=>k.replace(' Zone',''),k=>"",activeZone);
-const RRC_SUBS={"Deep":"Range3 ≤ P33","Neutral":"P33 < Range3 ≤ P66","Expansion":"Range3 > P66"};buildSection('regimeRRCMatrixCards',RRC_KEYS,analyticsStats.conditionalRRC,k=>k,k=>RRC_SUBS[k]||"",activeRRC);
-buildSection('regimeWeekdayMatrixCards',WEEKDAY_KEYS,analyticsStats.conditionalWeekday,k=>WEEKDAY_NAMES[k]||k,k=>"",activeWeekday);
-const BFQ_SUBS={"Normal":"≤2 blasts in 21d","Exhausted":">2 blasts in 21d"};buildSection('regimeBFQMatrixCards',BFQ_KEYS,analyticsStats.conditionalBFQ,k=>BFQ_NAMES[k],k=>BFQ_SUBS[k]||"",activeBFQ);
-buildSection('regimeWOMMatrixCards',WOM_KEYS,analyticsStats.conditionalWOM,k=>WOM_NAMES[k]||k,k=>"",activeWOM);}
+  const STAGE_LABELS={4:"All Compressed",3:"Any 2",2:"1 Compressed",1:"No Compression"};
+  const RRC_SUBS={"Deep":"Range3 ≤ P33","Neutral":"P33 < Range3 ≤ P66","Expansion":"Range3 > P66"};
+  const BFQ_SUBS={"Normal":"≤2 blasts in 21d","Exhausted":">2 blasts in 21d"};
+  const RMETA={"HighSptR":{col:"#ea580c",label:"High Vol / Wide",sub:`ATR/Spot > P66 (${(atrSpotP66*100).toFixed(2)}%) · Momentum`},"FlatSptR":{col:"#2563eb",label:"Flat / Neutral Vol",sub:`ATR/Spot P33–P66 · Ambiguous`},"LowSptR":{col:"#16a34a",label:"Low Vol / Coil",sub:`ATR/Spot < P33 (${(atrSpotP33*100).toFixed(2)}%) · Compression`}};
+
+  function hc(r){return r===null?"#94a3b8":r>=70?"#16a34a":r>=50?"#d97706":"#dc2626";}
+
+  function buildCard(outcomes,label,sub,isActive){
+    const t2b=getPureMeanT2B(outcomes);
+    const n=outcomes.length;
+    const hits=outcomes.filter(o=>o.blastDay>0).length;
+    const rate=n>0?hits/n*100:null;
+    const t2bStr=t2b.meanT2B!==null?t2b.meanT2B.toFixed(1)+"d":"—";
+    const hitStr=rate!==null?rate.toFixed(0)+"%":"—";
+    const bdr=isActive?"border:2px solid #a78bfa;box-shadow:0 0 0 3px #ede9fe;":"border:1px solid #e2e8f0;";
+    const base="background:#f8fafc;border-radius:12px;padding:14px 10px;flex:1;min-width:0;text-align:center;"+bdr;
+    if(n===0)return`<div style="${base}opacity:.4"><div style="font-size:11px;font-weight:700;color:#64748b">${label}</div><div style="font-size:10px;color:#94a3b8">${sub}</div><div style="font-size:18px;font-weight:900;color:#cbd5e1;margin-top:4px">—</div><div style="font-size:10px;color:#94a3b8">no data</div></div>`;
+    return`<div style="${base}"><div style="font-size:11px;font-weight:700;color:#1e293b">${label}</div><div style="font-size:10px;color:#94a3b8;margin-bottom:4px">${sub}</div><div style="font-size:22px;font-weight:900;color:${hc(rate)}">${hitStr}</div><div style="display:flex;justify-content:space-between;margin-top:8px"><span style="font-size:10px;color:#d97706;font-weight:700">⏱ ${t2bStr}</span><span style="font-size:10px;color:#94a3b8">n=${n}</span></div></div>`;
+  }
+
+  function buildSection(containerId,bucketKeys,condObj,labelFn,subFn,activeBucket){
+    const cont=document.getElementById(containerId);
+    if(!cont)return;
+    // Best bucket by Velocity Score across all regimes combined
+    let best=bucketKeys[0],bestV=-Infinity;
+    bucketKeys.forEach(k=>{
+      let allO=[];
+      REGIME_KEYS.forEach(r=>{const o=((condObj[r]||{})[k]||{outcomes:[]}).outcomes;allO=allO.concat(o);});
+      const n=allO.length;
+      const lambda=n/(n+NPS_CONFIG.BAYESIAN_K);
+      const v=n>0?lambda*bucketVelocityScore(allO).score:-Infinity;
+      if(v>bestV){bestV=v;best=k;}
+    });
+    const bestLabel=labelFn(best);
+    const bestSub=subFn(best);
+    cont.innerHTML=`<div style="background:#fef9ec;border:1px solid #fcd34d;border-radius:10px;padding:8px 14px;margin-bottom:14px;font-size:12px;font-weight:800;color:#92400e;">⭐ ${bestLabel}${bestSub?" — "+bestSub:""} IS THE BEST SETUP <span style="font-weight:500;font-size:10px;color:#b45309;margin-left:6px">· highest Velocity Score across all regimes</span></div>`;
+    REGIME_KEYS.forEach(r=>{
+      const m=RMETA[r]||{col:"#94a3b8",label:r,sub:""};
+      const isAR=r===activeRegime;
+      const opacity=(!isAR&&activeRegime)?"opacity:.45;":"";
+      const sc=isAR?"#a78bfa":m.col;
+      const cards=bucketKeys.map(k=>{
+        const o=((condObj[r]||{})[k]||{outcomes:[]}).outcomes;
+        return buildCard(o,labelFn(k),subFn(k),isAR&&String(k)===String(activeBucket));
+      }).join("");
+      cont.innerHTML+=`<div style="margin-bottom:14px;${opacity}"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div style="width:3px;min-height:32px;border-radius:999px;background:${sc}"></div><div><div style="font-size:13px;font-weight:700;color:${isAR?"#7c3aed":m.col}">${m.label}${isAR?" ◀ ACTIVE":""}</div><div style="font-size:10px;color:#94a3b8;font-family:monospace">${m.sub}</div></div></div><div style="display:flex;gap:8px">${cards}</div></div>`;
+    });
+  }
+
+  buildSection("regimeStageMatrixCards",STAGE_KEYS,analyticsStats.conditionalStage,k=>"S"+k,k=>STAGE_LABELS[k]||"",activeStage);
+  buildSection("regimeZoneMatrixCards",ZONE_KEYS,analyticsStats.conditionalZone,k=>k.replace(" Zone",""),k=>"",activeZone);
+  buildSection("regimeRRCMatrixCards",RRC_KEYS,analyticsStats.conditionalRRC,k=>k,k=>RRC_SUBS[k]||"",activeRRC);
+  buildSection("regimeWeekdayMatrixCards",WEEKDAY_KEYS,analyticsStats.conditionalWeekday,k=>WEEKDAY_NAMES[k]||k,k=>"",activeWeekday);
+  buildSection("regimeBFQMatrixCards",BFQ_KEYS,analyticsStats.conditionalBFQ,k=>BFQ_NAMES[k],k=>BFQ_SUBS[k]||"",activeBFQ);
+  buildSection("regimeWOMMatrixCards",WOM_KEYS,analyticsStats.conditionalWOM,k=>WOM_NAMES[k]||k,k=>"",activeWOM);
+}
 
 function exportCSV(){if(!globalProcessedData.length)return;const flattened=globalProcessedData.map(row=>{const p=row._prob||{};const{_prob,...rest}=row;return{...rest,Prob_StageSamples:p.stageSamples??'',Prob_ZoneSamples:p.zoneSamples??'',Prob_RRCSamples:p.rrcSamples??'',Prob_WeekdaySamples:p.weekdaySamples??'',Prob_BFQSamples:p.bfqSamples??'',Prob_WOMSamples:p.womSamples??'',Prob_TotalN:p.totalN??'',Prob_Lambda:p.lambda!=null?p.lambda.toFixed(4):'',Funnel1_N:(p.stageSamples!=null&&p.zoneSamples!=null)?p.stageSamples+p.zoneSamples:'',Funnel2_N:(p.rrcSamples!=null&&p.bfqSamples!=null)?p.rrcSamples+p.bfqSamples:'',Funnel3_N:(p.weekdaySamples!=null&&p.womSamples!=null)?p.weekdaySamples+p.womSamples:''};});let blob=new Blob([Papa.unparse(flattened)],{type:'text/csv;charset=utf-8;'});let link=document.createElement("a");link.setAttribute("href",URL.createObjectURL(blob));link.setAttribute("download","nps_v22_data.csv");document.body.appendChild(link);link.click();document.body.removeChild(link);}
 
 function copyAuditToClipboard(){const btn=document.getElementById('auditCopyBtn');try{const lines=[];const sep="─".repeat(52);const ts=new Date().toISOString().replace('T',' ').slice(0,19)+' UTC';lines.push("═".repeat(52));lines.push("  NPS AUDIT SNAPSHOT · "+ts);lines.push("═".repeat(52));lines.push("");lines.push("LIVE SIGNAL");lines.push(sep);const ac=window._auditCache||{};const ap=ac.prob||{};lines.push("Zone             : "+(document.getElementById('pZoneContext')?.innerText||'—'));lines.push("Stage            : "+(document.getElementById('pStageContext')?.innerText||'—'));lines.push("RRC              : "+(document.getElementById('pRRCContext')?.innerText||'—'));lines.push("BFQ              : "+(document.getElementById('pBFQContext')?.innerText||'—'));lines.push("Regime           : "+(document.getElementById('pRegimeContext')?.innerText||'—'));lines.push("Anchor Close     : "+(ac.anchorClose!=null?ac.anchorClose.toFixed(2):'—'));lines.push("ATR14            : "+(ac.atr14!=null?ac.atr14.toFixed(4):'—'));lines.push("ATR/Spot         : "+(ac.atrSpotNow!=null?(ac.atrSpotNow*100).toFixed(4)+'%':'—'));lines.push("");lines.push("MasterP Score    : "+(ap.masterP||'—')+"%");lines.push("Relative Rank    : "+(ap.relPct||'—'));lines.push("Signal Badge     : "+(ap.badge||'—'));lines.push("Blast Horizon    : "+(document.getElementById('masterBlastHorizon')?.innerText||'—'));lines.push("");lines.push("BACKTEST SUMMARY");lines.push(sep);const total=globalProcessedData.length;if(total>0){const hits=globalProcessedData.filter(r=>r.ExpansionHit==1).length;lines.push("Total Anchor Bars: "+total);lines.push("Expansion Hits   : "+hits+" ("+(hits/total*100).toFixed(1)+"%)");lines.push("MasterP Range    : Min="+historicalScoreBounds.min.toFixed(1)+"% Max="+historicalScoreBounds.max.toFixed(1)+"%");}lines.push("");lines.push("═".repeat(52));lines.push("  END OF AUDIT");lines.push("═".repeat(52));const text=lines.join('\n');navigator.clipboard.writeText(text).then(()=>{btn.innerText='✅ Copied!';setTimeout(()=>{btn.innerText='📋 Copy Audit';},2000);}).catch(()=>{const ta=document.createElement('textarea');ta.value=text;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);btn.innerText='✅ Copied!';setTimeout(()=>{btn.innerText='📋 Copy Audit';},2000);});}catch(err){alert('Audit error: '+err.message);btn.innerText='📋 Copy Audit';}}
 </script>
 </body>
-</html>
+    </html>
