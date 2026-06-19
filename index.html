@@ -115,20 +115,29 @@ input[type=date]:focus { outline: none; border-color: var(--accent-blue); }
   </div>
 
   <!-- ── Data Sources ── -->
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-    <div class="card p-6 space-y-3">
-      <div class="section-label">Option A — Cloud Pipeline</div>
-      <div class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-mono text-xs text-blue-700 break-all" id="activeUrlDisplay">Loading…</div>
-      <button id="editUrlBtn" class="text-xs font-semibold text-slate-500 hover:text-slate-700 transition px-3 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300">Change URL</button>
-    </div>
-    <div class="card p-6 space-y-3">
-      <div class="section-label">Option B — Paste Shield</div>
-      <div class="flex gap-3">
-        <textarea id="pasteDataInput" placeholder="Date,Open,High,Low,Close…" class="flex-1 h-20 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-mono text-slate-700 focus:outline-none focus:border-blue-400 placeholder-slate-400 resize-none"></textarea>
-        <button id="processPasteBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-3 px-4 rounded-xl transition leading-tight shrink-0">🚀 Load<br>Paste</button>
+  <details class="card overflow-hidden">
+    <summary style="padding:14px 24px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:10px;list-style:none;">
+      <span>⚙️</span><span style="font-size:14px;font-weight:700;color:#334155">Data Sources</span>
+      <span style="font-size:11px;color:#94a3b8;font-weight:400">Cloud Pipeline &amp; Paste Shield</span>
+      <span style="margin-left:auto;font-size:11px;color:#94a3b8">▶ expand</span>
+    </summary>
+    <div style="padding:0 16px 16px;border-top:1px solid #f1f5f9">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        <div class="card p-6 space-y-3">
+          <div class="section-label">Option A — Cloud Pipeline</div>
+          <div class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-mono text-xs text-blue-700 break-all" id="activeUrlDisplay">Loading…</div>
+          <button id="editUrlBtn" class="text-xs font-semibold text-slate-500 hover:text-slate-700 transition px-3 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300">Change URL</button>
+        </div>
+        <div class="card p-6 space-y-3">
+          <div class="section-label">Option B — Paste Shield</div>
+          <div class="flex gap-3">
+            <textarea id="pasteDataInput" placeholder="Date,Open,High,Low,Close…" class="flex-1 h-20 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-mono text-slate-700 focus:outline-none focus:border-blue-400 placeholder-slate-400 resize-none"></textarea>
+            <button id="processPasteBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-3 px-4 rounded-xl transition leading-tight shrink-0">🚀 Load<br>Paste</button>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
+  </details>
 
   <div id="dataQualityBanner" class="hidden bg-amber-50 border border-amber-300 text-amber-800 text-xs px-5 py-3 rounded-xl font-mono"></div>
 
@@ -322,8 +331,15 @@ input[type=date]:focus { outline: none; border-color: var(--accent-blue); }
     </div>
   </div>
 
-  <!-- ── Matrix Sections ── -->
-  <div id="statsSection" class="hidden space-y-5">
+  <div id="statsSection" class="hidden">
+    <details>
+      <summary style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:16px 24px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:10px;list-style:none;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:20px">
+        <span>📊</span>
+        <span style="font-size:14px;font-weight:700;color:#334155">Backtest Matrices</span>
+        <span style="font-size:11px;color:#94a3b8;font-weight:400">Stage · Zone · RRC · Weekday · BFQ · WOM</span>
+        <span style="margin-left:auto;font-size:11px;color:#94a3b8">▶ expand</span>
+      </summary>
+      <div class="space-y-5">
 
     <div class="card p-7">
       <div class="flex items-center gap-3 mb-5">
@@ -373,6 +389,8 @@ input[type=date]:focus { outline: none; border-color: var(--accent-blue); }
       <div id="regimeWOMMatrixCards" class="space-y-4"></div>
     </div>
 
+      </div>
+    </details>
   </div>
 </div>
 
@@ -615,4 +633,4 @@ function exportCSV(){if(!globalProcessedData.length)return;const flattened=globa
 function copyAuditToClipboard(){const btn=document.getElementById('auditCopyBtn');try{const lines=[];const sep="─".repeat(52);const ts=new Date().toISOString().replace('T',' ').slice(0,19)+' UTC';lines.push("═".repeat(52));lines.push("  NPS AUDIT SNAPSHOT · "+ts);lines.push("═".repeat(52));lines.push("");lines.push("LIVE SIGNAL");lines.push(sep);const ac=window._auditCache||{};const ap=ac.prob||{};lines.push("Zone             : "+(document.getElementById('pZoneContext')?.innerText||'—'));lines.push("Stage            : "+(document.getElementById('pStageContext')?.innerText||'—'));lines.push("RRC              : "+(document.getElementById('pRRCContext')?.innerText||'—'));lines.push("BFQ              : "+(document.getElementById('pBFQContext')?.innerText||'—'));lines.push("Regime           : "+(document.getElementById('pRegimeContext')?.innerText||'—'));lines.push("Anchor Close     : "+(ac.anchorClose!=null?ac.anchorClose.toFixed(2):'—'));lines.push("ATR14            : "+(ac.atr14!=null?ac.atr14.toFixed(4):'—'));lines.push("ATR/Spot         : "+(ac.atrSpotNow!=null?(ac.atrSpotNow*100).toFixed(4)+'%':'—'));lines.push("");lines.push("MasterP Score    : "+(ap.masterP||'—')+"%");lines.push("Relative Rank    : "+(ap.relPct||'—'));lines.push("Signal Badge     : "+(ap.badge||'—'));lines.push("Blast Horizon    : "+(document.getElementById('masterBlastHorizon')?.innerText||'—'));lines.push("");lines.push("BACKTEST SUMMARY");lines.push(sep);const total=globalProcessedData.length;if(total>0){const hits=globalProcessedData.filter(r=>r.ExpansionHit==1).length;lines.push("Total Anchor Bars: "+total);lines.push("Expansion Hits   : "+hits+" ("+(hits/total*100).toFixed(1)+"%)");lines.push("MasterP Range    : Min="+historicalScoreBounds.min.toFixed(1)+"% Max="+historicalScoreBounds.max.toFixed(1)+"%");}lines.push("");lines.push("═".repeat(52));lines.push("  END OF AUDIT");lines.push("═".repeat(52));const text=lines.join('\n');navigator.clipboard.writeText(text).then(()=>{btn.innerText='✅ Copied!';setTimeout(()=>{btn.innerText='📋 Copy Audit';},2000);}).catch(()=>{const ta=document.createElement('textarea');ta.value=text;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);btn.innerText='✅ Copied!';setTimeout(()=>{btn.innerText='📋 Copy Audit';},2000);});}catch(err){alert('Audit error: '+err.message);btn.innerText='📋 Copy Audit';}}
 </script>
 </body>
-    </html>
+</html>
