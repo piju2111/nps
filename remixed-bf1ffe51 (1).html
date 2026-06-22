@@ -638,6 +638,8 @@ function renderConditionalMatrices(activeRegime,activeStage,activeZone,activeRRC
     if(n===0)return`<div style="${base}opacity:.4"><div style="font-size:11px;font-weight:700;color:#64748b">${label}</div><div style="font-size:10px;color:#94a3b8">${sub}</div><div style="font-size:18px;font-weight:900;color:#cbd5e1;margin-top:4px">—</div><div style="font-size:10px;color:#94a3b8">no data</div></div>`;
     return`<div style="${base}"><div style="font-size:11px;font-weight:700;color:#1e293b">${label}</div><div style="font-size:10px;color:#94a3b8;margin-bottom:4px">${sub}</div><div style="font-size:22px;font-weight:900;color:${hc(rate)}">${hitStr}</div><div style="display:flex;justify-content:space-between;margin-top:8px"><span style="font-size:10px;color:#d97706;font-weight:700">⏱ ${t2bStr}</span><span style="font-size:10px;color:#94a3b8">n=${n}</span></div></div>`;
   }
+
+  
   function buildSection(containerId,bucketKeys,condObj,labelFn,subFn,activeBucket){
     const cont=document.getElementById(containerId);if(!cont)return;
     let best=bucketKeys[0],bestV=-Infinity;
@@ -647,3 +649,4 @@ function renderConditionalMatrices(activeRegime,activeStage,activeZone,activeRRC
     REGIME_KEYS.forEach(r=>{const m=RMETA[r]||{col:"#94a3b8",label:r,sub:""};const isAR=r===activeRegime;const opacity=(!isAR&&activeRegime)?"opacity:.45;":"";const sc=isAR?"#a78bfa":m.col;
       const cards=bucketKeys.map(k=>{const o=((condObj[r]||{})[k]||{outcomes:[]}).outcomes;return buildCard(o,labelFn(k),subFn(k),isAR&&String(k)===String(activeBucket));}).join("");
       cont.innerHTML+=`<div style="margin-bottom:14px;${opacity}"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div style="width:3px;min-height:32px;border-radius:
+  }
