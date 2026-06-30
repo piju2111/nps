@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NIFTY NPS v24 - 8 Pillars</title>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+:root{--card-bg:#ffffff;--page-bg:#f1f5f9;--border:#e2e8f0;--text-primary:#0f172a;--text-muted:#94a3b8;--accent-blue:#2563eb;--accent-green:#16a34a;--accent-amber:#d97706;--accent-red:#dc2626;--accent-purple:#7c3aed;}
+body{background:var(--page-bg);font-family:Inter,"Segoe UI",system-ui,sans-serif;color:var(--text-primary);letter-spacing:-.01em}
+.card{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;box-shadow:0 1px 4px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04)}
+.pill{display:inline-flex;align-items:center;border-radius:999px;font-size:11px;font-weight:700;padding:2px 10px;letter-spacing:.02em}
+.stat-tile{background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:16px}
+.progress-track{background:#e2e8f0;border-radius:999px;height:6px;overflow:hidden}
+.progress-fill{height:6px;border-radius:999px;transition:width .6s ease}
+.master-score{font-size:3.5rem;font-weight:200;line-height:1;background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple));-webkit-background-clip:text;background-clip:text;color:transparent}
+input[type=date]{background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:6px 12px;color:var(--text-primary);font-size:13px}
+input[type=date]:focus{outline:none;border-color:var(--accent-blue)}
+.section-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)}
+</style>
+</head>
+<body class="min-h-screen p-5">
+<div class="max-w-7xl mx-auto space-y-5">
+
+<!-- Header -->
+<div class="card p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+  <div>
+    <div class="flex items-center gap-2 mb-1">
+      <span class="text-2xl">📡</span>
+      <h1 class="text-xl font-bold text-slate-900">NPS Repair Radar</h1>
+      <span class="pill bg-blue-50 text-blue-700 border border-blue-200">v24</span>
+      <span class="pill bg-purple-50 text-purple-700 border border-purple-200">8 Pillars</span>
+    </div>
+    <p class="text-xs text-slate-500">Stage · Zone · ZPath · RRC · Weekday · BFQ · WOM · RoC · Precision-Weighted MasterP · SptR Regime</p>
+  </div>
+  <div class="flex flex-wrap gap-2 w-full md:w-auto">
+    <button id="syncSheetBtn" class="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-5 rounded-xl text-sm shadow-sm transition">🔄 Auto-Sync Sheet</button>
+    <button id="exportBtn" disabled class="flex-1 md:flex-none bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2.5 px-4 rounded-xl disabled:opacity-40 text-sm transition">Export CSV</button>
+    <button id="auditCopyBtn" disabled class="flex-1 md:flex-none bg-violet-600 hover:bg-violet-700 text-white font-medium py-2.5 px-4 rounded-xl disabled:opacity-40 text-sm transition">📋 Copy Audit</button>
+  </div>
+</div>
+
+<!-- Data Sources -->
+<details class="card overflow-hidden">
+  <summary style="padding:14px 24px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:10px;list-style:none">
+    <span>⚙️</span><span style="font-size:14px;font-weight:700;color:#334155">Data Sources</span>
+    <span style="font-size:11px;color:#94a3b8">Cloud Pipeline &amp; Paste Shield</span>
+    <span style="margin-left:auto;font-size:11px;color:#94a3b8">▶ expand</span>
+  </summary>
+  <div style="padding:0 16px 16px;border-top:1px solid #f1f5f9">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+      <div class="card p-6 space-y-3">
+        <div class="section-label">Option A — Cloud Pipeline</div>
+        <div class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-mono text-xs text-blue-700 break-all" id="activeUrlDisplay">Loading…</div>
+        <button id="editUrlBtn" class="text-xs font-semibold text-slate-500 hover:text-slate-700 transition px-3 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300">Change URL</button>
+      </div>
+      <div class="card p-6 space-y-3">
+        <div class="section-label">Option B — Paste Shield</div>
+        <div class="flex gap-3">
+          <textarea id="pasteDataInput" placeholder="Date,Open,High,Low,Close…" class="flex-1 h-20 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-mono text-slate-700 focus:outline-none focus:border-blue-400 placeholder-slate-400 resize-none"></textarea>
+          <button id="processPasteBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-3 px-4 rounded-xl transition leading-tight shrink-0">🚀 Load<br>Paste</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</details>
+
+<div id="dataQualityBanner" class="hidden bg-amber-50 border border-amber-300 text-amber-800 text-xs px-5 py-3 rounded-xl font-mono"></div>
+
+<!-- Inspector -->
+<div id="inspectorPanel" class="card p-6 hidden">
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div>
+      <h2 class="text-base font-bold text-slate-900">📅 Market Structure Radar</h2>
+      <p class="text-xs text-slate-500 mt-0.5">Date-specific inspection of engine values</p>
+    </div>
+    <input type="date" id="inspectDate">
+  </div>
+</div>
+
+<!-- Live Signal -->
+<div id="multiplierPanel" class="hidden card p-7 space-y-6">
+  <div class="flex justify-between items-center">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl">🔮</span>
+      <div><h2 class="text-lg font-bold text-slate-900">NPS Live Target Signal</h2><p class="section-label mt-0.5">Real-time Bayesian · 8-Pillar Precision-Weighted MasterP</p></div>
+    </div>
+    <div id="signalDateBadge" class="text-sm font-mono bg-slate-100 px-4 py-1.5 rounded-full text-slate-700 font-semibold">—</div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+    <!-- Where is the Market -->
+    <div class="space-y-3">
+      <div class="section-label">📍 Where Is The Market?</div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="stat-tile"><div class="section-label text-cyan-600 mb-2">Spatial Zone</div><div id="pZoneContext" class="text-lg font-black text-slate-900">—</div><div id="pZonePos" class="text-[10px] text-slate-500 mt-1 leading-tight">—</div></div>
+        <div class="stat-tile"><div class="section-label text-amber-600 mb-2">Compression</div><div id="pStageContext" class="text-lg font-black text-slate-900">—</div><div id="pStagePos" class="text-[10px] text-slate-500 mt-1 leading-tight">—</div></div>
+        <div class="stat-tile"><div class="section-label text-purple-600 mb-2">RRC · Eye-2</div><div id="pRRCContext" class="text-lg font-black text-slate-900">—</div><div id="pRRCPos" class="text-[10px] text-slate-500 mt-1 leading-tight">—</div></div>
+        <div class="stat-tile"><div class="section-label text-rose-600 mb-2">💥 BFQ Qualifier</div><div id="pBFQContext" class="text-lg font-black text-slate-900">—</div><div id="pBFQPos" class="text-[10px] text-slate-500 mt-1 leading-tight">—</div></div>
+        <div class="stat-tile"><div class="section-label text-emerald-600 mb-2">Target Weekday</div><div id="pWeekdayContext" class="text-lg font-black text-slate-900">—</div><div id="pWeekdayPos" class="text-[10px] text-slate-500 mt-1 leading-tight">—</div></div>
+        <div class="stat-tile"><div class="section-label text-violet-600 mb-2">Week of Month</div><div id="pWOMContext" class="text-lg font-black text-slate-900">—</div><div id="pWOMPos" class="text-[10px] text-slate-500 mt-1 leading-tight">—</div></div>
+        <div class="stat-tile col-span-2"><div class="section-label text-indigo-600 mb-2">📐 Zone Path Trajectory (ZPath)</div><div id="pZPathContext" class="text-base font-black text-slate-900">—</div><div id="pZPathPos" class="text-[10px] text-slate-500 mt-1 leading-tight">—</div></div>
+        <div class="stat-tile col-span-2"><div class="section-label text-teal-600 mb-2">📈 Rate of Change (RoC14)</div><div id="pRoCContext" class="text-base font-black text-slate-900">—</div><div id="pRoCPos" class="text-[10px] text-slate-500 mt-1 leading-tight">—</div></div>
+        <div class="stat-tile col-span-2"><div class="section-label text-orange-600 mb-2">Active Macro Volatility Regime</div><div id="pRegimeContext" class="text-base font-black text-slate-900 break-words">—</div><div id="pRegimePos" class="text-[10px] text-slate-500 mt-1 leading-tight">—</div></div>
+      </div>
+    </div>
+
+    <!-- Hit Rate -->
+    <div class="space-y-3">
+      <div class="section-label">🎯 Hit Rate &amp; Time To Blast</div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="stat-tile flex flex-col items-center justify-center text-center"><div class="section-label mb-2">Combined Hit%</div><div id="traderHitRate" class="text-4xl font-black text-slate-900">—</div><div class="text-[10px] text-slate-400 mt-1">8-Pillar Combined</div></div>
+        <div class="stat-tile flex flex-col items-center justify-center text-center"><div class="section-label mb-2">Time To Blast</div><div id="masterBlastHorizon" class="text-4xl font-black text-amber-600">—</div><div class="text-[10px] text-slate-400 mt-1">Mean days</div></div>
+      </div>
+      <div class="grid grid-cols-4 gap-2">
+        <div class="stat-tile text-center py-3"><div class="section-label mb-1">Stage</div><div id="traderStageHit" class="text-xl font-black text-slate-800">—</div><div id="traderStageN" class="text-[10px] text-slate-400 font-mono">n=—</div></div>
+        <div class="stat-tile text-center py-3"><div class="section-label mb-1">Zone</div><div id="traderZoneHit" class="text-xl font-black text-slate-800">—</div><div id="traderZoneN" class="text-[10px] text-slate-400 font-mono">n=—</div></div>
+        <div class="stat-tile text-center py-3"><div class="section-label mb-1">ZPath</div><div id="traderZPathHit" class="text-xl font-black text-slate-800">—</div><div id="traderZPathN" class="text-[10px] text-slate-400 font-mono">n=—</div></div>
+        <div class="stat-tile text-center py-3"><div class="section-label mb-1">RRC</div><div id="traderRRCHit" class="text-xl font-black text-slate-800">—</div><div id="traderRRCN" class="text-[10px] text-slate-400 font-mono">n=—</div></div>
+        <div class="stat-tile text-center py-3"><div class="section-label mb-1">Weekday</div><div id="traderWeekdayHit" class="text-xl font-black text-slate-800">—</div><div id="traderWeekdayN" class="text-[10px] text-slate-400 font-mono">n=—</div></div>
+        <div class="stat-tile text-center py-3"><div class="section-label mb-1">BFQ</div><div id="traderBFQHit" class="text-xl font-black text-slate-800">—</div><div id="traderBFQN" class="text-[10px] text-slate-400 font-mono">n=—</div></div>
+        <div class="stat-tile text-center py-3"><div class="section-label mb-1">WOM</div><div id="traderWOMHit" class="text-xl font-black text-slate-800">—</div><div id="traderWOMN" class="text-[10px] text-slate-400 font-mono">n=—</div></div>
+        <div class="stat-tile text-center py-3"><div class="section-label mb-1">RoC</div><div id="traderRoCHit" class="text-xl font-black text-slate-800">—</div><div id="traderRoCN" class="text-[10px] text-slate-400 font-mono">n=—</div></div>
+      </div>
+    </div>
+
+    <!-- Decision -->
+    <div id="pceDecisionBlock" class="stat-tile space-y-4">
+      <div class="section-label">⚡ Tradetron Action</div>
+      <div class="bg-white border border-slate-200 rounded-xl p-5 text-center shadow-sm">
+        <div class="section-label mb-2">Set Max_Limit %</div>
+        <div id="signalMultiplierValue" class="text-3xl font-black text-slate-900 tracking-wide">—</div>
+        <div id="signalActionNote" class="text-xs text-slate-500 mt-2 leading-relaxed">—</div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm"><div class="section-label mb-1">Conviction</div><div id="pceBadge" class="font-black text-sm px-2 py-0.5 rounded-lg inline-block">—</div></div>
+        <div class="bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm text-right"><div class="section-label mb-1">Rel. Rank</div><div id="pExpiry" class="text-sm font-black text-purple-600 font-mono">—</div></div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm flex items-center justify-between gap-3">
+        <div><div class="section-label mb-1">Master P-Score</div><div id="masterProbabilityScore" class="master-score">—</div></div>
+        <div class="w-24 space-y-1.5">
+          <div class="progress-track"><div id="masterProbBar" class="progress-fill" style="width:0%"></div></div>
+          <div id="pceWinRateText" class="text-[9px] text-slate-400 font-mono text-right leading-tight">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pillar Detail -->
+  <details class="group">
+    <summary class="cursor-pointer section-label flex items-center gap-2 select-none hover:text-slate-600 transition-colors">
+      <span class="group-open:rotate-90 transition-transform inline-block">▶</span>
+      Conditional Pillar Detail — Stage · Zone · ZPath · RRC · Weekday · BFQ · WOM · RoC
+    </summary>
+    <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 p-5 bg-slate-50 border border-slate-200 rounded-2xl">
+      <div class="space-y-2"><div class="flex justify-between items-center"><span class="section-label text-amber-600">Stage | R</span><span id="pillarStageValue" class="text-xs font-black text-slate-700 font-mono">—</span></div><div class="progress-track"><div id="pillarStageBar" class="progress-fill bg-amber-400" style="width:0%"></div></div><div id="pillarStageDetail" class="text-[10px] text-slate-400 font-mono text-right">n/a</div></div>
+      <div class="space-y-2"><div class="flex justify-between items-center"><span class="section-label text-cyan-600">Zone | R</span><span id="pillarZoneValue" class="text-xs font-black text-slate-700 font-mono">—</span></div><div class="progress-track"><div id="pillarZoneBar" class="progress-fill bg-cyan-400" style="width:0%"></div></div><div id="pillarZoneDetail" class="text-[10px] text-slate-400 font-mono text-right">n/a</div></div>
+      <div class="space-y-2"><div class="flex justify-between items-center"><span class="section-label text-indigo-600">ZPath | R</span><span id="pillarZPathValue" class="text-xs font-black text-slate-700 font-mono">—</span></div><div class="progress-track"><div id="pillarZPathBar" class="progress-fill bg-indigo-400" style="width:0%"></div></div><div id="pillarZPathDetail" class="text-[10px] text-slate-400 font-mono text-right">n/a</div></div>
+      <div class="space-y-2"><div class="flex justify-between items-center"><span class="section-label text-purple-600">RRC | R</span><span id="pillarRRCValue" class="text-xs font-black text-slate-700 font-mono">—</span></div><div class="progress-track"><div id="pillarRRCBar" class="progress-fill bg-purple-400" style="width:0%"></div></div><div id="pillarRRCDetail" class="text-[10px] text-slate-400 font-mono text-right">n/a</div></div>
+      <div class="space-y-2"><div class="flex justify-between items-center"><span class="section-label text-emerald-600">Weekday | R</span><span id="pillarWeekdayValue" class="text-xs font-black text-slate-700 font-mono">—</span></div><div class="progress-track"><div id="pillarWeekdayBar" class="progress-fill bg-emerald-400" style="width:0%"></div></div><div id="pillarWeekdayDetail" class="text-[10px] text-slate-400 font-mono text-right">n/a</div></div>
+      <div class="space-y-2"><div class="flex justify-between items-center"><span class="section-label text-rose-600">BFQ | R</span><span id="pillarBFQValue" class="text-xs font-black text-slate-700 font-mono">—</span></div><div class="progress-track"><div id="pillarBFQBar" class="progress-fill bg-rose-400" style="width:0%"></div></div><div id="pillarBFQDetail" class="text-[10px] text-slate-400 font-mono text-right">n/a</div></div>
+      <div class="space-y-2"><div class="flex justify-between items-center"><span class="section-label text-violet-600">WOM | R</span><span id="pillarWOMValue" class="text-xs font-black text-slate-700 font-mono">—</span></div><div class="progress-track"><div id="pillarWOMBar" class="progress-fill bg-violet-400" style="width:0%"></div></div><div id="pillarWOMDetail" class="text-[10px] text-slate-400 font-mono text-right">n/a</div></div>
+      <div class="space-y-2"><div class="flex justify-between items-center"><span class="section-label text-teal-600">RoC | R</span><span id="pillarRoCValue" class="text-xs font-black text-slate-700 font-mono">—</span></div><div class="progress-track"><div id="pillarRoCBar" class="progress-fill bg-teal-400" style="width:0%"></div></div><div id="pillarRoCDetail" class="text-[10px] text-slate-400 font-mono text-right">n/a</div></div>
+    </div>
+  </details>
+</div>
+
+<!-- Regime Intelligence -->
+<details id="regimeScorePanel" class="hidden card overflow-hidden">
+  <summary style="padding:14px 24px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:10px;list-style:none">
+    <span>🏆</span><span style="font-size:14px;font-weight:700;color:#334155">Regime Intelligence</span>
+    <span style="font-size:11px;color:#94a3b8">· informational only — not in MasterP</span>
+    <span style="margin-left:auto;font-size:11px;color:#94a3b8">▶ expand</span>
+  </summary>
+  <div style="padding:16px;border-top:1px solid #f1f5f9">
+    <p class="text-[11px] text-slate-400 font-mono mb-4">All outcomes pooled per regime umbrella · Velocity Score + Bayesian shrinkage · <span class="text-amber-600 font-semibold">informational only</span></p>
+    <div id="regimeScoreCards" class="grid grid-cols-1 sm:grid-cols-3 gap-4"></div>
+  </div>
+</details>
+
+<!-- Matrices -->
+<div id="statsSection" class="hidden">
+  <details>
+    <summary style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:16px 24px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:10px;list-style:none;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:20px">
+      <span>📊</span><span style="font-size:14px;font-weight:700;color:#334155">Backtest Matrices</span>
+      <span style="font-size:11px;color:#94a3b8">Stage · Zone · ZPath · RRC · Weekday · BFQ · WOM · RoC</span>
+      <span style="margin-left:auto;font-size:11px;color:#94a3b8">▶ expand</span>
+    </summary>
+    <div class="space-y-5">
+      <div class="card p-7"><div class="flex items-center gap-3 mb-5"><span class="text-xl">📊</span><div><h2 class="text-base font-bold text-slate-900">Regime × Stage Matrix</h2><p class="text-[11px] text-slate-400 font-mono mt-0.5">Hit% · T2B · n samples</p></div></div><div id="regimeStageMatrixCards" class="space-y-4"></div></div>
+      <div class="card p-7"><div class="flex items-center gap-3 mb-5"><span class="text-xl">🎯</span><div><h2 class="text-base font-bold text-slate-900">Regime × Zone Matrix</h2><p class="text-[11px] text-slate-400 font-mono mt-0.5">Hit% · T2B · n samples</p></div></div><div id="regimeZoneMatrixCards" class="space-y-4"></div></div>
+      <div class="card p-7"><div class="flex items-center gap-3 mb-5"><span class="text-xl">📐</span><div><h2 class="text-base font-bold text-slate-900">Regime × ZPath Matrix <span class="text-xs font-normal text-slate-400">7th Pillar · Zone Path Trajectory</span></h2><p class="text-[11px] text-slate-400 font-mono mt-0.5">Chop (0) · Fade (1) = bearish drift · Launchpad (2) = bullish lock</p></div></div><div id="regimeZPathMatrixCards" class="space-y-4"></div></div>
+      <div class="card p-7"><div class="flex items-center gap-3 mb-5"><span class="text-xl">🔭</span><div><h2 class="text-base font-bold text-slate-900">Regime × RRC Matrix <span class="text-xs font-normal text-slate-400">Eye-2</span></h2><p class="text-[11px] text-slate-400 font-mono mt-0.5">Deep = compressed · Neutral = balanced · Expansion = volatile</p></div></div><div id="regimeRRCMatrixCards" class="space-y-4"></div></div>
+      <div class="card p-7"><div class="flex items-center gap-3 mb-5"><span class="text-xl">📅</span><div><h2 class="text-base font-bold text-slate-900">Regime × Weekday Matrix</h2><p class="text-[11px] text-slate-400 font-mono mt-0.5">Mon–Fri buckets</p></div></div><div id="regimeWeekdayMatrixCards" class="space-y-4"></div></div>
+      <div class="card p-7"><div class="flex items-center gap-3 mb-5"><span class="text-xl">💥</span><div><h2 class="text-base font-bold text-slate-900">Regime × BFQ Matrix</h2><p class="text-[11px] text-slate-400 font-mono mt-0.5">21d lookback · 7 non-overlapping 3d sets · blast = 3d range &gt; 2×ATR</p></div></div><div id="regimeBFQMatrixCards" class="space-y-4"></div></div>
+      <div class="card p-7"><div class="flex items-center gap-3 mb-5"><span class="text-xl">🗓️</span><div><h2 class="text-base font-bold text-slate-900">Regime × WOM Matrix</h2><p class="text-[11px] text-slate-400 font-mono mt-0.5">W1 (1-7) · W2 (8-14) · W3 (15-21) · W4 (22-28) · W5 (29+)</p></div></div><div id="regimeWOMMatrixCards" class="space-y-4"></div></div>
+      <div class="card p-7"><div class="flex items-center gap-3 mb-5"><span class="text-xl">📈</span><div><h2 class="text-base font-bold text-slate-900">Regime × RoC Grid Matrix <span class="text-xs font-normal text-slate-400">8th Pillar · 14-Period Momentum Grid</span></h2><p class="text-[11px] text-slate-400 font-mono mt-0.5">0=Squeeze/Churn · 1=Momentum Exhaustion · 2=Velocity Lock</p></div></div><div id="regimeRoCMatrixCards" class="space-y-4"></div></div>
+      <div class="card p-7" id="varianceDiagPanel" style="display:none">
+        <div class="flex items-center gap-3 mb-5">
+          <span class="text-xl">🔬</span>
+          <div>
+            <h2 class="text-base font-bold text-slate-900">Precision Weight Variance Diagnostic</h2>
+            <p class="text-[11px] text-slate-400 font-mono mt-0.5">Per-pillar bucket variance · VARIANCE_FLOOR=0.02 · floor hits = over-rewarded buckets</p>
+          </div>
+        </div>
+        <div id="varianceDiagContent" class="space-y-3"></div>
+      </div>
+    </div>
+  </details>
+</div>
+</div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────────
+let globalProcessedData=[],globalOutcomeLog=[],dateLookupMap={};
+let analyticsStats={stage:{1:{outcomes:[]},2:{outcomes:[]},3:{outcomes:[]},4:{outcomes:[]}},zone:{"Lower Zone":{outcomes:[]},"Middle Zone":{outcomes:[]},"Upper Zone":{outcomes:[]}},regime:{"HighSptR":{outcomes:[]},"LowSptR":{outcomes:[]}},conditionalStage:{},conditionalZone:{}};
+
+// ── CONSTANTS ──────────────────────────────────────────────────
+const REGIME_KEYS=["HighSptR","LowSptR"];
+const STAGE_KEYS=[4,3,2,1];const ZONE_KEYS=["Upper Zone","Middle Zone","Lower Zone"];const RRC_KEYS=["Deep","Neutral","Expansion"];
+const WEEKDAY_KEYS=[1,2,3,4,5];const WEEKDAY_NAMES={1:"Mon",2:"Tue",3:"Wed",4:"Thu",5:"Fri"};
+const BFQ_KEYS=["Normal","Exhausted"];const BFQ_NAMES={"Normal":"Normal (≤2)","Exhausted":"Exhausted (>2)"};
+const WOM_KEYS=[1,2,3,4,5];const WOM_NAMES={1:"W1",2:"W2",3:"W3",4:"W4",5:"W5"};
+const ZPATH_KEYS=[0,1,2];const ZPATH_NAMES={0:"Chop",1:"Fade",2:"Launchpad"};
+const ROC_KEYS=[0,1,2]; // 0=Squeeze/Churn, 1=Momentum Exhaustion, 2=Velocity Lock
+const ROC_NAMES={"0":"Squeeze","1":"Exhaustion","2":"VelocityLock"};
+
+// GlobalRate variables removed — shrinkage eliminated, precision weight is sole guard
+let rrcP33=0.4,rrcP66=0.8,atrSpotP50=0.007;
+
+// ── UTILITY FUNCTIONS ──────────────────────────────────────────
+function getWeekOfMonth(d){return Math.ceil(new Date(d).getUTCDate()/7);}
+function classifyRRCState(range3,atr14){const r=atr14>0?range3/atr14:1;return r<=rrcP33?"Deep":r<=rrcP66?"Neutral":"Expansion";}
+
+function computeZPath(rawRows,ai,zph20,zpl20){
+  if(ai<20)return 0;
+  const zR=zph20-zpl20;
+  function dzs(c){if(zR<=0)return 0;const p=(c-zpl20)/zR;return p>=0.66?1:p<=0.33?-1:0;}
+  const sc=[];for(let d=19;d>=0;d--)sc.push(dzs(rawRows[ai-d].Close));
+  // 4 equal blocks of 5 across the 20-day window
+  const B1=(sc[0]+sc[1]+sc[2]+sc[3]+sc[4])/5;          // oldest
+  const B2=(sc[5]+sc[6]+sc[7]+sc[8]+sc[9])/5;
+  const B3=(sc[10]+sc[11]+sc[12]+sc[13]+sc[14])/5;
+  const B4=(sc[15]+sc[16]+sc[17]+sc[18]+sc[19])/5;     // newest
+  // Launchpad: recent block bullish AND trajectory non-declining B1->B4
+  if(B4>=0.3&&B4>=B3&&B3>=B2-0.1&&B4>B1)return 2;
+  // Fade: recent block bearish AND trajectory non-rising B1->B4
+  if(B4<=-0.3&&B4<=B3&&B3<=B2+0.1&&B4<B1)return 1;
+  return 0;
+}
+
+function computeBFQState(rawRows,anchorIdx){if(anchorIdx<20)return"Normal";const atr=rawRows.slice(anchorIdx-13,anchorIdx+1).reduce((a,d)=>a+d.TR,0)/14;let bc=0;for(let s=0;s<7;s++){const e=anchorIdx-s*3,st=e-2;if(st<0)break;const hi=Math.max(rawRows[st].High,rawRows[st+1].High,rawRows[e].High),lo=Math.min(rawRows[st].Low,rawRows[st+1].Low,rawRows[e].Low);if(atr>0&&(hi-lo)>2*atr)bc++;}return bc<=2?"Normal":"Exhausted";}
+
+function initConditionalStats(){
+  analyticsStats.conditionalStage={};analyticsStats.conditionalZone={};analyticsStats.conditionalRRC={};
+  analyticsStats.conditionalWeekday={};analyticsStats.conditionalBFQ={};analyticsStats.conditionalWOM={};analyticsStats.conditionalZPath={};analyticsStats.conditionalRoC={};
+  REGIME_KEYS.forEach(r=>{
+    analyticsStats.conditionalStage[r]={};analyticsStats.conditionalZone[r]={};analyticsStats.conditionalRRC[r]={};
+    analyticsStats.conditionalWeekday[r]={};analyticsStats.conditionalBFQ[r]={};analyticsStats.conditionalWOM[r]={};analyticsStats.conditionalZPath[r]={};analyticsStats.conditionalRoC[r]={};
+    STAGE_KEYS.forEach(s=>analyticsStats.conditionalStage[r][s]={outcomes:[]});
+    ZONE_KEYS.forEach(z=>analyticsStats.conditionalZone[r][z]={outcomes:[]});
+    RRC_KEYS.forEach(rrc=>analyticsStats.conditionalRRC[r][rrc]={outcomes:[]});
+    WEEKDAY_KEYS.forEach(wd=>analyticsStats.conditionalWeekday[r][wd]={outcomes:[]});
+    BFQ_KEYS.forEach(bfq=>analyticsStats.conditionalBFQ[r][bfq]={outcomes:[]});
+    WOM_KEYS.forEach(wom=>analyticsStats.conditionalWOM[r][wom]={outcomes:[]});
+    ZPATH_KEYS.forEach(zp=>analyticsStats.conditionalZPath[r][zp]={outcomes:[]});
+    ROC_KEYS.forEach(roc=>analyticsStats.conditionalRoC[r][String(roc)]={outcomes:[]});
+  });
+}
+initConditionalStats();
+
+let historicalScoreBounds={"HighSptR":{min:Infinity,max:-Infinity},"LowSptR":{min:Infinity,max:-Infinity}};
+const DEFAULT_SHEET_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0WRRoaKlcjrQ6xthFpq5r5n8XQpUSeUg7rsy0zXBUdx46HBacISyimAsIRbGPRYpsvpkUGwLCSJQm/pub?output=csv";
+
+document.getElementById('syncSheetBtn').addEventListener('click',loadCloudSheetData);
+document.getElementById('processPasteBtn').addEventListener('click',handleManualPaste);
+document.getElementById('exportBtn').addEventListener('click',exportCSV);
+document.getElementById('auditCopyBtn').addEventListener('click',copyAuditToClipboard);
+document.getElementById('inspectDate').addEventListener('input',handleDateInspect);
+document.getElementById('editUrlBtn').addEventListener('click',handleUrlEdit);
+window.addEventListener('DOMContentLoaded',()=>{let u=localStorage.getItem('nps_cloud_sheet_url')||DEFAULT_SHEET_URL;document.getElementById('activeUrlDisplay').innerText=u;loadCloudSheetData();});
+
+function handleUrlEdit(){let c=localStorage.getItem('nps_cloud_sheet_url')||DEFAULT_SHEET_URL;let n=prompt("New Sheet CSV URL:",c);if(n&&n.trim()){localStorage.setItem('nps_cloud_sheet_url',n.trim());document.getElementById('activeUrlDisplay').innerText=n.trim();loadCloudSheetData();}}
+function fetchWithTimeout(url,opts,ms){return Promise.race([fetch(url,opts||{}),new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout')),ms))]);}
+const NPS_CSV_CACHE_KEY='nps_last_good_csv';
+
+function loadCloudSheetData(){var baseUrl=localStorage.getItem('nps_cloud_sheet_url')||DEFAULT_SHEET_URL;var bust=(baseUrl.indexOf('?')!==-1?'&':'?')+'_cb='+Date.now();var fresh=baseUrl+bust;var btn=document.getElementById('syncSheetBtn');btn.innerText="⏳ Syncing…";btn.disabled=true;
+var routes=[{label:'Direct',run:()=>fetchWithTimeout(fresh,{cache:'no-store'},7000).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.text();})},{label:'corsproxy.io',run:()=>fetchWithTimeout('https://corsproxy.io/?'+encodeURIComponent(fresh),{},7000).then(r=>{if(!r.ok)throw new Error();return r.text();})},{label:'api.codetabs',run:()=>fetchWithTimeout('https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(baseUrl),{},7000).then(r=>{if(!r.ok)throw new Error();return r.text();})},{label:'allorigins.win',run:()=>fetchWithTimeout('https://api.allorigins.win/get?url='+encodeURIComponent(baseUrl),{},8000).then(r=>r.json()).then(j=>{if(!j.contents)throw new Error();return j.contents;})}];
+var idx=0;function tryNext(){if(idx>=routes.length){var cached=null;try{cached=localStorage.getItem(NPS_CSV_CACHE_KEY);}catch(e){}if(cached&&cached.indexOf(',')!==-1){document.getElementById('dataQualityBanner').innerHTML='⚠️ Network unavailable — running on cached data.';document.getElementById('dataQualityBanner').classList.remove('hidden');parseAndProcessCSV(cached);}else{alert("All routes failed. Use Paste Shield.");resetSyncBtn();}return;}
+btn.innerText='⏳ Route '+(idx+1)+'/4 ('+routes[idx].label+')…';routes[idx].run().then(text=>{if(!text||text.indexOf(',')===-1)throw new Error('Invalid');try{localStorage.setItem(NPS_CSV_CACHE_KEY,text);}catch(e){}parseAndProcessCSV(text);}).catch(()=>{idx++;tryNext();});}tryNext();}
+
+function resetSyncBtn(){var b=document.getElementById('syncSheetBtn');b.innerText="🔄 Auto-Sync Sheet";b.disabled=false;}
+function handleManualPaste(){var t=document.getElementById('pasteDataInput').value.trim();try{localStorage.setItem(NPS_CSV_CACHE_KEY,t);}catch(e){}parseAndProcessCSV(t);}
+function parseAndProcessCSV(csv){Papa.parse(csv,{header:true,skipEmptyLines:true,complete:r=>washAndProcessRows(r.data)});}
+
+const MONTH_MAP={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+function cleanDateString(rawDate){if(!rawDate)return"";let s=String(rawDate).trim().replace(/T.*$/,'').trim();if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;let parts=s.split(/[-\/\s\.]+/);if(parts.length!==3)return s;let[p0,p1,p2]=parts;let mn=[p0,p1,p2].map(p=>MONTH_MAP[p.toLowerCase().slice(0,3)]);if(mn[0]){let y=p2.length===2?'20'+p2:p2;return`${y}-${String(mn[0]).padStart(2,'0')}-${p1.padStart(2,'0')}`;}if(mn[1]){let y=p2.length===2?'20'+p2:p2;return`${y}-${String(mn[1]).padStart(2,'0')}-${p0.padStart(2,'0')}`;}if(mn[2])return`${p0}-${String(mn[2]).padStart(2,'0')}-${p1.padStart(2,'0')}`;let[n0,n1,n2]=[parseInt(p0),parseInt(p1),parseInt(p2)];if(p0.length===4)return`${n0}-${String(n1).padStart(2,'0')}-${String(n2).padStart(2,'0')}`;let ry=y=>y<100?(y<50?2000+y:1900+y):y;if(p2.length>=2){let y=ry(n2);let d,m;if(n0>12){d=n0;m=n1;}else if(n1>12){d=n1;m=n0;}else{d=n0;m=n1;}return`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}return s;}
+function parseCleanNumber(val){if(val===undefined||val===null)return 0;if(typeof val==='number')return val;let p=parseFloat(String(val).replace(/,/g,''));return isNaN(p)?0:p;}
+
+function washAndProcessRows(dataRows){
+  let cleanRows=dataRows.map(row=>{let obj={};Object.keys(row).forEach(k=>{if(!k)return;let wk=String(k).replace(/^\ufeff/g,'').trim().toLowerCase();if(wk==='date')obj['Date']=row[k];else if(['open','high','low','close'].includes(wk))obj[wk.charAt(0).toUpperCase()+wk.slice(1)]=parseCleanNumber(row[k]);});return obj;});
+  let rejected={noDate:0,zeroOHLC:0,badHL:0,duplicate:0,spike:0};let seenDates=new Set();let prevClose=null,prevOHLC=null;
+  let validRows=cleanRows.filter(row=>{if(!row.Date||!cleanDateString(row.Date)){rejected.noDate++;return false;}if(!row.Open||!row.High||!row.Low||!row.Close||row.Open<=0||row.High<=0||row.Low<=0||row.Close<=0){rejected.zeroOHLC++;return false;}if(row.High<row.Low||row.Close>row.High||row.Close<row.Low){rejected.badHL++;return false;}let dk=cleanDateString(row.Date);if(seenDates.has(dk)){rejected.duplicate++;return false;}seenDates.add(dk);let ok=`${row.Open}_${row.High}_${row.Low}_${row.Close}`;if(prevOHLC===ok){rejected.duplicate++;return false;}prevOHLC=ok;if(prevClose!==null){let cp=Math.abs(row.Close-prevClose)/prevClose*100;if(cp>20){rejected.spike++;prevClose=row.Close;return false;}}prevClose=row.Close;return true;});
+  const LOOKBACK_YEARS=3;const cutoff=new Date();cutoff.setFullYear(cutoff.getFullYear()-LOOKBACK_YEARS);const cutoffStr=cutoff.toISOString().slice(0,10);const beforeLB=validRows.length;validRows=validRows.filter(row=>cleanDateString(row.Date)>=cutoffStr);const removedLB=beforeLB-validRows.length;
+  // BAYESIAN_K set in NPS_CONFIG — do not override here
+  let totalRej=Object.values(rejected).reduce((s,v)=>s+v,0);let banner=document.getElementById('dataQualityBanner');
+  if(totalRej>0||removedLB>0){banner.innerHTML=`⚠️ <strong>${totalRej} bad rows removed</strong> · <strong>${validRows.length} clean rows loading</strong>${removedLB>0?` · ${removedLB} outside 3yr window`:''}`;banner.classList.remove('hidden');}else{banner.classList.add('hidden');}
+  if(validRows.length<115){alert("Need at least 115 clean rows.");resetSyncBtn();return;}
+  try{processSpatialEngine(validRows);}catch(err){console.error("[NPS]",err);banner.innerHTML=`❌ Engine error: ${err.message}`;banner.classList.remove('hidden');resetSyncBtn();}
+}
+
+let velFastCut=3,velMidCut=6;
+const NPS_CONFIG={WEIGHTS:{FAST:0.50,MID:1.00,SLOW:0.25,MISS:-0.5},STAND_DOWN_THRESHOLD:0.25};
+function velocityWeight(bd,hit){if(!hit||bd===0)return NPS_CONFIG.WEIGHTS.MISS;if(bd<=velFastCut)return NPS_CONFIG.WEIGHTS.FAST;if(bd<=velMidCut)return NPS_CONFIG.WEIGHTS.MID;return NPS_CONFIG.WEIGHTS.SLOW;}
+function bucketVelocityScore(outcomes){if(!outcomes.length)return{score:0,pillarScore:0,fast:0,mid:0,slow:0,miss:0,total:0,raw:0};let fast=0,mid=0,slow=0,miss=0,rawScore=0;outcomes.forEach(o=>{let w=velocityWeight(o.blastDay,o.hit);rawScore+=w;if(!o.hit||o.blastDay===0)miss++;else if(o.blastDay<=velFastCut)fast++;else if(o.blastDay<=velMidCut)mid++;else slow++;});const score=rawScore/outcomes.length;return{score,pillarScore:Math.min(100,score*100),fast,mid,slow,miss,total:outcomes.length,raw:rawScore};}
+function getPrecisionWeight(outcomes){const MIN_SAMPLES=5,VARIANCE_FLOOR=0.02;if(!outcomes||outcomes.length<MIN_SAMPLES)return 0;const n=outcomes.length;const scores=outcomes.map(o=>velocityWeight(o.blastDay,o.hit));const mean=scores.reduce((sum,s)=>sum+s,0)/n;const variance=scores.reduce((sum,s)=>sum+Math.pow(s-mean,2),0)/n;return n/Math.max(variance,VARIANCE_FLOOR);}
+function getRegimeFromSptR(v){if(v===null||v===undefined)return"HighSptR";return v>=atrSpotP50?"HighSptR":"LowSptR";}
+function getConfirmedRegime(rawRegime,processed){const n=processed.length;if(n<3)return rawRegime;const[r1,r2,r3]=[processed[n-1].RawRegime,processed[n-2].RawRegime,processed[n-3].RawRegime];if(r1===rawRegime&&r2===rawRegime&&r3===rawRegime)return rawRegime;return processed[n-1].RegimeState;}
+let blastT2BHistory=[],t2bP50=5;
+
+function computeRoCGrid(rawRows, anchorIdx, atr14) {
+  if (anchorIdx < 16) return 0; // need anchorIdx-13-3=anchorIdx-16 minimum
+
+  const internalScores = [];
+  const threshold = (atr14 / rawRows[anchorIdx].Close) * 100 * 0.5; // fixed ATR/Spot hurdle
+
+  for (let d = 13; d >= 0; d--) {
+    const idx = anchorIdx - d;
+    const cNow   = rawRows[idx].Close;
+    const cPrev3 = rawRows[idx - 3].Close;
+    if (!cPrev3 || cPrev3 <= 0) { internalScores.push(0); continue; }
+    const roc3 = ((cNow - cPrev3) / cPrev3) * 100;
+    if      (roc3 >=  threshold) internalScores.push(1);
+    else if (roc3 <= -threshold) internalScores.push(-1);
+    else                         internalScores.push(0);
+  }
+
+  // B1: oldest 4 days, B2: middle 6 days, B3: newest 4 days
+  const B1 = (internalScores[0]  + internalScores[1]  + internalScores[2]  + internalScores[3])  / 4;
+  const B2 = (internalScores[4]  + internalScores[5]  + internalScores[6]  +
+              internalScores[7]  + internalScores[8]  + internalScores[9])                        / 6;
+  const B3 = (internalScores[10] + internalScores[11] + internalScores[12] + internalScores[13]) / 4;
+
+  // Velocity Lock: recent block bullish AND full trajectory rising B1->B2->B3
+  if (B3 >= 0.25 && B3 >= B2 && B2 >= B1) return 2;
+  // Momentum Exhaustion: recent bearish OR trajectory collapsed from positive start
+  if (B3 <= -0.25 || (B1 > 0.1 && B3 < B1 - 0.5)) return 1;
+  // Squeeze / Churn
+  return 0;
+}
+
+// ── PROBABILITY ENGINE (8 pillars, Precision-Weighted MasterP) ───────────
+function ProbabilityEngine(stage,zone,regimeState,rrcState,weekday,bfqState,womState,zpathState,rocState){
+  const NEUTRAL=50;
+  function pillarShrink(outcomes){if(!outcomes.length)return{pillarScore:0,rawScore:0,lambda:0,vs:bucketVelocityScore([]),n:0};const vs=bucketVelocityScore(outcomes);const n=outcomes.length;return{pillarScore:Math.min(100,vs.pillarScore),rawScore:vs.pillarScore,lambda:0,vs,n};}
+
+  const csOut=((analyticsStats.conditionalStage[regimeState]||{})[stage]||{outcomes:[]}).outcomes;
+  const stagePillar=pillarShrink(csOut);const stageSamples=csOut.length;const stageVS=stagePillar.vs;
+  const czOut=((analyticsStats.conditionalZone[regimeState]||{})[zone]||{outcomes:[]}).outcomes;
+  const zonePillar=pillarShrink(czOut);const zoneSamples=czOut.length;const zoneVS=zonePillar.vs;
+  const rrcKey=rrcState||"Neutral";const crOut=((analyticsStats.conditionalRRC[regimeState]||{})[rrcKey]||{outcomes:[]}).outcomes;
+  const rrcPillar=pillarShrink(crOut);const rrcSamples=crOut.length;const rrcVS=rrcPillar.vs;
+  const wdKey=(weekday!==null&&weekday!==undefined)?weekday:0;const cwOut=(wdKey>=1&&wdKey<=5&&(analyticsStats.conditionalWeekday[regimeState]||{})[wdKey])?(analyticsStats.conditionalWeekday[regimeState][wdKey].outcomes):[];
+  const weekdayPillar=pillarShrink(cwOut);const weekdaySamples=cwOut.length;const weekdayVS=weekdayPillar.vs;
+  const bfqKey=bfqState||"Normal";const cbOut=((analyticsStats.conditionalBFQ[regimeState]||{})[bfqKey]||{outcomes:[]}).outcomes;
+  const bfqPillar=pillarShrink(cbOut);const bfqSamples=cbOut.length;const bfqVS=bfqPillar.vs;
+  const womKey=womState||1;const cwomOut=((analyticsStats.conditionalWOM[regimeState]||{})[womKey]||{outcomes:[]}).outcomes;
+  const womPillar=pillarShrink(cwomOut);const womSamples=cwomOut.length;const womVS=womPillar.vs;
+  const zpKey=zpathState!==undefined?zpathState:0;const czpOut=((analyticsStats.conditionalZPath[regimeState]||{})[zpKey]||{outcomes:[]}).outcomes;
+  const zpathPillar=pillarShrink(czpOut);const zpathSamples=czpOut.length;const zpathVS=zpathPillar.vs;
+  const rocKey=String((rocState !== undefined && rocState !== null) ? rocState : 0);const crocOut=((analyticsStats.conditionalRoC[regimeState]||{})[rocKey]||{outcomes:[]}).outcomes;
+  const rocPillar=pillarShrink(crocOut);const rocSamples=crocOut.length;const rocVS=rocPillar.vs;
+
+  // ── Precision Weighting: N / Variance — rewards consistent pillars over noisy ones ──
+  // Pillars with <5 samples return 0 — excluded from aggregate
+
+  const w_stage   = getPrecisionWeight(csOut);
+  const w_zone    = getPrecisionWeight(czOut);
+  const w_zpath   = getPrecisionWeight(czpOut);
+  const w_rrc     = getPrecisionWeight(crOut);
+  const w_bfq     = getPrecisionWeight(cbOut);
+  const w_weekday = getPrecisionWeight(cwOut);
+  const w_wom     = getPrecisionWeight(cwomOut);
+  const w_roc     = getPrecisionWeight(crocOut);
+
+  // 2. Sum of all active samples
+  const totalWeight = w_stage + w_zone + w_zpath + w_rrc + w_bfq + w_weekday + w_wom + w_roc;
+
+  let masterP = 50; // Safe Neutral Fallback
+
+  if (totalWeight > 0) {
+      // 3. Aggregate MasterP using precision-weighted allocation (N/Variance)
+      masterP = ( (stagePillar.pillarScore   * w_stage)   +
+                  (zonePillar.pillarScore    * w_zone)    +
+                  (zpathPillar.pillarScore   * w_zpath)   +
+                  (rrcPillar.pillarScore     * w_rrc)     +
+                  (bfqPillar.pillarScore     * w_bfq)     +
+                  (weekdayPillar.pillarScore * w_weekday) +
+                  (womPillar.pillarScore     * w_wom)     +
+                  (rocPillar.pillarScore     * w_roc) ) / totalWeight;
+  }
+
+  const totalN=[csOut,czOut,czpOut,crOut,cwOut,cbOut,cwomOut,crocOut].reduce((sum,arr)=>sum+(arr?arr.length:0),0);
+  // lambda removed — Bayesian shrinkage eliminated
+  // regimePrior removed — no longer consumed anywhere
+
+  const regOutcomes=(analyticsStats.regime[regimeState]||{outcomes:[]}).outcomes;
+  const regimeSamples=regOutcomes.length;
+
+  return{stageScore:stagePillar.pillarScore,zoneScore:zonePillar.pillarScore,rrcScore:rrcPillar.pillarScore,weekdayScore:weekdayPillar.pillarScore,bfqScore:bfqPillar.pillarScore,womScore:womPillar.pillarScore,zpathScore:zpathPillar.pillarScore,rocScore:rocPillar.pillarScore,masterP,stageVS,zoneVS,rrcVS,weekdayVS,bfqVS,womVS,zpathVS,rocVS,stageSamples,zoneSamples,rrcSamples,weekdaySamples,bfqSamples,womSamples,zpathSamples,rocSamples,regimeSamples,stagePillar,zonePillar,rrcPillar,weekdayPillar,bfqPillar,womPillar,zpathPillar,rocPillar,totalN,stageContrib:stagePillar.pillarScore,zoneContrib:zonePillar.pillarScore,rrcContrib:rrcPillar.pillarScore,weekdayContrib:weekdayPillar.pillarScore,bfqContrib:bfqPillar.pillarScore,womContrib:womPillar.pillarScore,zpathContrib:zpathPillar.pillarScore,rocContrib:rocPillar.pillarScore,csOutcomes:csOut,czOutcomes:czOut,crOutcomes:crOut,cwOutcomes:cwOut,cbOutcomes:cbOut,cwomOutcomes:cwomOut,czpOutcomes:czpOut,crocOutcomes:crocOut};}
+
+function getDynamicAllocation(score, currentRegime){
+  const rKey = (currentRegime === "HighSptR" || currentRegime === "LowSptR") ? currentRegime : "LowSptR";
+  const mn = historicalScoreBounds[rKey].min;
+  const mx = historicalScoreBounds[rKey].max;
+  const range = mx - mn;
+  if(range <= 0) return {mult:"STAND DOWN",multiplier:0,relPct:0,border:"border-red-300",bg:"bg-red-50",note:`Degenerate score range for ${rKey} — insufficient historical spread.`};
+  const relPct = Math.max(0, Math.min(1, (score - mn) / range));
+  let threshold = NPS_CONFIG.STAND_DOWN_THRESHOLD;
+  if(rKey === "HighSptR") threshold = 0.15;
+  if(rKey === "LowSptR") threshold = 0.35;
+  if(relPct < threshold) return {mult:"STAND DOWN",multiplier:0,relPct,border:"border-red-300",bg:"bg-red-50",note:`Relative score ${(relPct*100).toFixed(1)}% — below adaptive ${rKey} floor.`};
+  const multiplier = parseFloat(relPct.toFixed(2));
+  const border = relPct>=0.75?"border-emerald-300":relPct>=0.50?"border-blue-300":relPct>=0.35?"border-amber-300":"border-orange-300";
+  const bg = relPct>=0.75?"bg-emerald-50":relPct>=0.50?"bg-blue-50":relPct>=0.35?"bg-amber-50":"bg-orange-50";
+  return {mult:`Max_Limit * ${multiplier.toFixed(2)}`,multiplier,relPct,border,bg,note:`Score ranks at ${(relPct*100).toFixed(1)}% of local historical ${rKey} range (${mn.toFixed(1)}–${mx.toFixed(1)}). Deploy ${(multiplier*100).toFixed(0)}% of Max_Limit.`};
+}
+
+function computePillarPct(condObj,regime,bucket,targetScore){try{if(!condObj)return null;const all=[];Object.values(condObj).forEach(rb=>{if(!rb)return;Object.values(rb).forEach(b=>{if(b&&b.outcomes&&b.outcomes.length>0){const hits=b.outcomes.filter(o=>o.hit===1).length;all.push(hits/b.outcomes.length);}});});if(!all.length)return null;all.sort((a,b)=>a-b);return(all.filter(v=>v<targetScore).length/all.length)*100;}catch(e){return null;}}
+
+// ── MAIN ENGINE ────────────────────────────────────────────────
+function processSpatialEngine(rawRows){
+  rawRows.forEach(r=>{r.computedDateStr=cleanDateString(r.Date);});
+  rawRows.sort((a,b)=>new Date(a.computedDateStr)-new Date(b.computedDateStr));
+  for(let i=0;i<rawRows.length;i++){let curr=rawRows[i],prev=i>0?rawRows[i-1]:null;curr.TR=prev?Math.max(curr.High-curr.Low,Math.abs(curr.High-prev.Close),Math.abs(curr.Low-prev.Close)):curr.High-curr.Low;}
+
+  let allBD=[];blastT2BHistory=[];{let p=100;while(p<rawRows.length-10){let a14=rawRows.slice(p-14,p).reduce((s,d)=>s+d.TR,0)/14,ac=rawRows[p-1].Close,bd=0,hit=0;for(let di=0;p+di<rawRows.length;di++){let fr=rawRows[p+di],mm=Math.max(Math.abs(fr.High-ac),Math.abs(ac-fr.Low));if(a14>0&&mm/a14>=2){bd=di+1;hit=1;break;}}if(hit){allBD.push(bd);blastT2BHistory.push(bd);p+=bd;}else p++;}}
+  allBD.sort((a,b)=>a-b);velFastCut=allBD[Math.floor(allBD.length*0.33)]??3;velMidCut=allBD[Math.floor(allBD.length*0.66)]??6;if(velFastCut>=velMidCut){velFastCut=3;velMidCut=6;}
+  let t2bS=[...allBD];t2bP50=t2bS[Math.floor(t2bS.length*0.50)]??5;
+  {let allAS=[];for(let k=14;k<rawRows.length;k++){let a14=rawRows.slice(k-14,k).reduce((s,d)=>s+d.TR,0)/14,ac=rawRows[k-1].Close;if(ac>0)allAS.push(a14/ac);}allAS.sort((a,b)=>a-b);atrSpotP50=allAS[Math.floor(allAS.length*0.50)]||0.007;}
+  let allRRC=[];for(let k=105;k<rawRows.length-10;k++){let ai=k-1,r3h=Math.max(...rawRows.slice(ai-2,ai+1).map(d=>d.High)),r3l=Math.min(...rawRows.slice(ai-2,ai+1).map(d=>d.Low)),a14=rawRows.slice(ai-13,ai+1).reduce((s,d)=>s+d.TR,0)/14;allRRC.push(a14>0?(r3h-r3l)/a14:1);}
+  allRRC.sort((a,b)=>a-b);rrcP33=allRRC[Math.floor(allRRC.length*0.33)]??0.4;rrcP66=allRRC[Math.floor(allRRC.length*0.66)]??0.8;if(rrcP33>=rrcP66){rrcP33=0.4;rrcP66=0.8;}
+
+  let processed=[],dateLookupMap_={};
+  // ── MAIN LOOP: builds processed / dateLookupMap ──
+  let i=100;
+  while(i<rawRows.length){
+    let currentDay=rawRows[i],ai=i-1;
+    let h3=Math.max(...rawRows.slice(ai-2,ai+1).map(d=>d.High)),l3=Math.min(...rawRows.slice(ai-2,ai+1).map(d=>d.Low));
+    let ph5=Math.max(...rawRows.slice(ai-7,ai-2).map(d=>d.High)),pl5=Math.min(...rawRows.slice(ai-7,ai-2).map(d=>d.Low));
+    let h5=Math.max(...rawRows.slice(ai-4,ai+1).map(d=>d.High)),l5=Math.min(...rawRows.slice(ai-4,ai+1).map(d=>d.Low));
+    let ph10=Math.max(...rawRows.slice(ai-14,ai-4).map(d=>d.High)),pl10=Math.min(...rawRows.slice(ai-14,ai-4).map(d=>d.Low));
+    let h10=Math.max(...rawRows.slice(ai-9,ai+1).map(d=>d.High)),l10=Math.min(...rawRows.slice(ai-9,ai+1).map(d=>d.Low));
+    let ph20=Math.max(...rawRows.slice(ai-29,ai-9).map(d=>d.High)),pl20=Math.min(...rawRows.slice(ai-29,ai-9).map(d=>d.Low));
+    let zph20=Math.max(...rawRows.slice(ai-20,ai).map(d=>d.High)),zpl20=Math.min(...rawRows.slice(ai-20,ai).map(d=>d.Low));
+    let atr14=rawRows.slice(ai-13,ai+1).reduce((sum,d)=>sum+d.TR,0)/14;
+    let tm=((h3-l3)<(ph5-pl5)?1:0)+((h5-l5)<(ph10-pl10)?1:0)+((h10-l10)<(ph20-pl20)?1:0);
+    let stage=tm===3?4:tm===2?3:tm===1?2:1;
+    let ac=rawRows[ai].Close,atrSpot=ac>0?atr14/ac:atrSpotP50;
+    let rawRegime=getRegimeFromSptR(atrSpot),regimeState=getConfirmedRegime(rawRegime,processed);
+    let pos20=(zph20-zpl20)>0?(ac-zpl20)/(zph20-zpl20):0.5;
+    let zone=pos20<=0.33?"Lower Zone":pos20>=0.66?"Upper Zone":"Middle Zone";
+    let rrcState=classifyRRCState(h3-l3,atr14);
+    let zpathState=computeZPath(rawRows,ai,zph20,zpl20);
+    const rocState=computeRoCGrid(rawRows,ai,atr14);
+    let futureSlice=rawRows.slice(i,i+10);let expHit=0,blastDay=0,hasFuture=futureSlice.length===10;
+    if(hasFuture){for(let di=0;di<futureSlice.length;di++){let fr=futureSlice[di],mm=Math.max(Math.abs(fr.High-ac),Math.abs(ac-fr.Low));if(atr14>0&&mm/atr14>=2&&blastDay===0){blastDay=di+1;expHit=1;}}}
+    let dKey=currentDay.computedDateStr;
+    let row={Date:dKey,Close:ac,Stage:stage,Zone:zone,RawRegime:rawRegime,RegimeState:regimeState,RRCState:rrcState,BFQState:computeBFQState(rawRows,ai),ZPathState:zpathState,RoCState:rocState,ExpansionHit:expHit,BlastDay:blastDay,VelWeight:hasFuture?velocityWeight(blastDay,expHit):null,HasFutureData:hasFuture};
+    processed.push(row);dateLookupMap_[dKey]=row;
+    let adv=hasFuture&&expHit&&blastDay>0?blastDay:hasFuture?10:1;
+    for(let skip=1;skip<adv;skip++){
+      let si=i+skip;if(si>=rawRows.length)break;
+      let sk=rawRows[si].computedDateStr;if(dateLookupMap_[sk])continue;
+      let sai=si-1;
+      let sh3=Math.max(...rawRows.slice(sai-2,sai+1).map(d=>d.High)),sl3=Math.min(...rawRows.slice(sai-2,sai+1).map(d=>d.Low));
+      let sph5=Math.max(...rawRows.slice(sai-7,sai-2).map(d=>d.High)),spl5=Math.min(...rawRows.slice(sai-7,sai-2).map(d=>d.Low));
+      let sh5=Math.max(...rawRows.slice(sai-4,sai+1).map(d=>d.High)),sl5=Math.min(...rawRows.slice(sai-4,sai+1).map(d=>d.Low));
+      let sph10=Math.max(...rawRows.slice(sai-14,sai-4).map(d=>d.High)),spl10=Math.min(...rawRows.slice(sai-14,sai-4).map(d=>d.Low));
+      let sh10=Math.max(...rawRows.slice(sai-9,sai+1).map(d=>d.High)),sl10=Math.min(...rawRows.slice(sai-9,sai+1).map(d=>d.Low));
+      let sph20=Math.max(...rawRows.slice(sai-29,sai-9).map(d=>d.High)),spl20=Math.min(...rawRows.slice(sai-29,sai-9).map(d=>d.Low));
+      let szph20=Math.max(...rawRows.slice(sai-20,sai).map(d=>d.High)),szpl20=Math.min(...rawRows.slice(sai-20,sai).map(d=>d.Low));
+      let stm=((sh3-sl3)<(sph5-spl5)?1:0)+((sh5-sl5)<(sph10-spl10)?1:0)+((sh10-sl10)<(sph20-spl20)?1:0);
+      let sS=stm===3?4:stm===2?3:stm===1?2:1;
+      let sAC=rawRows[sai].Close,sPos=(szph20-szpl20)>0?(sAC-szpl20)/(szph20-szpl20):0.5;
+      let sZ=sPos<=0.33?"Lower Zone":sPos>=0.66?"Upper Zone":"Middle Zone";
+      let satr14=rawRows.slice(sai-13,sai+1).reduce((s,d)=>s+d.TR,0)/14;
+      let sRRC=classifyRRCState(sh3-sl3,satr14),sZPath=computeZPath(rawRows,sai,szph20,szpl20);
+      const sRoCState=computeRoCGrid(rawRows,sai,satr14);
+      let sAtrSpot=sAC>0?satr14/sAC:atrSpotP50;
+      let sRawRegime=getRegimeFromSptR(sAtrSpot),sRegime=getConfirmedRegime(sRawRegime,processed);
+      let sRow={Date:sk,Close:sAC,Stage:sS,Zone:sZ,RawRegime:sRawRegime,RegimeState:sRegime,RRCState:sRRC,BFQState:computeBFQState(rawRows,sai),ZPathState:sZPath,RoCState:sRoCState,ExpansionHit:0,BlastDay:0,VelWeight:null,HasFutureData:false};
+      dateLookupMap_[sk]=sRow;processed.push(sRow);
+    }
+    i+=adv;
+  }
+  globalProcessedData=processed;dateLookupMap=dateLookupMap_;
+
+  // ── ANALYTICS LOOP: builds outcomeLog + pillar tables (advance-by-10 on miss, no activeCM) ──
+  analyticsStats.stage={1:{outcomes:[]},2:{outcomes:[]},3:{outcomes:[]},4:{outcomes:[]}};
+  analyticsStats.zone={"Lower Zone":{outcomes:[]},"Middle Zone":{outcomes:[]},"Upper Zone":{outcomes:[]}};
+  analyticsStats.regime={"HighSptR":{outcomes:[]},"LowSptR":{outcomes:[]}};
+  initConditionalStats();globalOutcomeLog=[];
+  let analyticsProcessed=[];let j=100;
+  while(j<rawRows.length-10){
+    let ai=j-1;
+    let h3=Math.max(...rawRows.slice(ai-2,ai+1).map(r=>r.High)),l3=Math.min(...rawRows.slice(ai-2,ai+1).map(r=>r.Low));
+    let ph5=Math.max(...rawRows.slice(ai-7,ai-2).map(r=>r.High)),pl5=Math.min(...rawRows.slice(ai-7,ai-2).map(r=>r.Low));
+    let h5=Math.max(...rawRows.slice(ai-4,ai+1).map(r=>r.High)),l5=Math.min(...rawRows.slice(ai-4,ai+1).map(r=>r.Low));
+    let ph10=Math.max(...rawRows.slice(ai-14,ai-4).map(r=>r.High)),pl10=Math.min(...rawRows.slice(ai-14,ai-4).map(r=>r.Low));
+    let h10=Math.max(...rawRows.slice(ai-9,ai+1).map(r=>r.High)),l10=Math.min(...rawRows.slice(ai-9,ai+1).map(r=>r.Low));
+    let ph20=Math.max(...rawRows.slice(ai-29,ai-9).map(r=>r.High)),pl20=Math.min(...rawRows.slice(ai-29,ai-9).map(r=>r.Low));
+    let zph20=Math.max(...rawRows.slice(ai-20,ai).map(r=>r.High)),zpl20=Math.min(...rawRows.slice(ai-20,ai).map(r=>r.Low));
+    let a14=rawRows.slice(ai-13,ai+1).reduce((s,r)=>s+r.TR,0)/14;
+    let tm=((h3-l3)<(ph5-pl5)?1:0)+((h5-l5)<(ph10-pl10)?1:0)+((h10-l10)<(ph20-pl20)?1:0);
+    let stg=tm===3?4:tm===2?3:tm===1?2:1;
+    let ac=rawRows[ai].Close,p20=(zph20-zpl20)>0?(ac-zpl20)/(zph20-zpl20):0.5;
+    let zn=p20<=0.33?"Lower Zone":p20>=0.66?"Upper Zone":"Middle Zone";
+    let atrSpotJ=ac>0?a14/ac:atrSpotP50,rawRsJ=getRegimeFromSptR(atrSpotJ);
+    const _mainRow=dateLookupMap_[rawRows[j].computedDateStr];
+    const rs=_mainRow?_mainRow.RegimeState:getConfirmedRegime(rawRsJ,analyticsProcessed);
+    analyticsProcessed.push({RawRegime:rawRsJ,RegimeState:rs});
+    let rrcJ=classifyRRCState(h3-l3,a14),bfqJ=computeBFQState(rawRows,ai),zpathJ=computeZPath(rawRows,ai,zph20,zpl20);
+    const rocJ=computeRoCGrid(rawRows,ai,a14);
+    let ehj=0,bdj=0;for(let di=0;di<10;di++){let fr=rawRows[j+di];if(!fr)break;let mm=Math.max(Math.abs(fr.High-ac),Math.abs(ac-fr.Low));if(a14>0&&mm/a14>=2&&bdj===0){bdj=di+1;ehj=1;}}
+    let outcome={hit:ehj,blastDay:bdj};
+    const wdJ=new Date(rawRows[j].computedDateStr).getUTCDay(),womJ=getWeekOfMonth(rawRows[j].computedDateStr);
+    globalOutcomeLog.push({rowIndex:j,date:rawRows[j].computedDateStr,stg,zn,rs,rrc:rrcJ,wd:wdJ,bfq:bfqJ,wom:womJ,zpath:zpathJ,roc:rocJ,outcome});
+    if(analyticsStats.regime[rs])analyticsStats.regime[rs].outcomes.push(outcome);
+    if(analyticsStats.conditionalStage[rs]?.[stg])analyticsStats.conditionalStage[rs][stg].outcomes.push(outcome);
+    if(analyticsStats.conditionalZone[rs]?.[zn])analyticsStats.conditionalZone[rs][zn].outcomes.push(outcome);
+    if(rrcJ&&analyticsStats.conditionalRRC[rs]?.[rrcJ])analyticsStats.conditionalRRC[rs][rrcJ].outcomes.push(outcome);
+    if(wdJ>=1&&wdJ<=5&&analyticsStats.conditionalWeekday[rs]?.[wdJ])analyticsStats.conditionalWeekday[rs][wdJ].outcomes.push(outcome);
+    if(bfqJ&&analyticsStats.conditionalBFQ[rs]?.[bfqJ])analyticsStats.conditionalBFQ[rs][bfqJ].outcomes.push(outcome);
+    if(womJ&&analyticsStats.conditionalWOM[rs]?.[womJ])analyticsStats.conditionalWOM[rs][womJ].outcomes.push(outcome);
+    if(analyticsStats.conditionalZPath[rs]!==undefined&&analyticsStats.conditionalZPath[rs][zpathJ]!==undefined)analyticsStats.conditionalZPath[rs][zpathJ].outcomes.push(outcome);
+    if(rocJ!==undefined&&rocJ!==null&&analyticsStats.conditionalRoC[rs]?.[rocJ]!==undefined)analyticsStats.conditionalRoC[rs][String(rocJ)].outcomes.push(outcome);
+    j+=ehj?bdj:10;
+  }
+
+  globalProcessedData.forEach(row=>{
+    const wd=new Date(row.Date).getUTCDay();
+    const prob=ProbabilityEngine(row.Stage,row.Zone,row.RegimeState,row.RRCState,wd,row.BFQState,getWeekOfMonth(row.Date),row.ZPathState||0,row.RoCState !== undefined && row.RoCState !== null ? row.RoCState : 0);
+    row.MasterProbabilityScore=prob.masterP.toFixed(1);row.MasterP=prob.masterP;
+    row.Cond_Stage_Score=(prob.stageScore*100).toFixed(1);row.Cond_Zone_Score=(prob.zoneScore*100).toFixed(1);
+    row.Cond_RRC_Score=(prob.rrcScore*100).toFixed(1);row.Cond_Weekday_Score=(prob.weekdayScore*100).toFixed(1);
+    row.Cond_BFQ_Score=(prob.bfqScore*100).toFixed(1);row.Cond_WOM_Score=(prob.womScore*100).toFixed(1);
+    row.Cond_ZPath_Score=(prob.zpathScore*100).toFixed(1);row.Cond_RoC_Score=(prob.rocScore*100).toFixed(1);
+    row._prob={totalN:prob.totalN,stageSamples:prob.stageSamples,zoneSamples:prob.zoneSamples,rrcSamples:prob.rrcSamples,bfqSamples:prob.bfqSamples,weekdaySamples:prob.weekdaySamples,womSamples:prob.womSamples,zpathSamples:prob.zpathSamples,rocSamples:prob.rocSamples};
+  });
+
+  // ── REBUILT REGIME-SPECIFIC BOUNDS DICTIONARY ──
+  historicalScoreBounds = {
+    "HighSptR": { min: Infinity, max: -Infinity },
+    "LowSptR":  { min: Infinity, max: -Infinity }
+  };
+
+  globalProcessedData.forEach(row=>{
+    const wd=new Date(row.Date).getUTCDay();
+    const prob=ProbabilityEngine(row.Stage,row.Zone,row.RegimeState,row.RRCState,wd,row.BFQState,getWeekOfMonth(row.Date),row.ZPathState||0,row.RoCState !== undefined && row.RoCState !== null ? row.RoCState : 0);
+    const ok=prob.regimeSamples>=5;
+    if(!ok)return;
+    const rKey = (row.RegimeState === "HighSptR" || row.RegimeState === "LowSptR") ? row.RegimeState : "HighSptR";
+    if(prob.masterP < historicalScoreBounds[rKey].min) historicalScoreBounds[rKey].min = prob.masterP;
+    if(prob.masterP > historicalScoreBounds[rKey].max) historicalScoreBounds[rKey].max = prob.masterP;
+  });
+
+  REGIME_KEYS.forEach(r => {
+    if(!isFinite(historicalScoreBounds[r].min)) {
+      historicalScoreBounds[r] = { min: 0, max: 100 };
+    }
+  });
+
+  globalProcessedData.forEach(row=>{
+    const wd=new Date(row.Date).getUTCDay();
+    const prob=ProbabilityEngine(row.Stage,row.Zone,row.RegimeState,row.RRCState,wd,row.BFQState,getWeekOfMonth(row.Date),row.ZPathState||0,row.RoCState !== undefined && row.RoCState !== null ? row.RoCState : 0);
+    const ok=prob.regimeSamples>=5;
+    const band=ok?getDynamicAllocation(prob.masterP, row.RegimeState):{mult:"STAND DOWN",multiplier:0,relPct:0,note:"Insufficient pillar history."};
+    row.Relative_Score_Pct=ok?(band.relPct*100).toFixed(1)+"%":"—";row.Recommended_Allocation=band.mult;
+  });
+
+  if(processed.length>0){const el=document.getElementById('inspectDate');el.min=processed[0].Date;el.max=processed[processed.length-1].Date;el.value=processed[processed.length-1].Date;}
+  document.getElementById('multiplierPanel').classList.remove('hidden');document.getElementById('inspectorPanel').classList.remove('hidden');document.getElementById('statsSection').classList.remove('hidden');
+  renderConditionalMatrices(null,null,null,null,null,null,null,null);
+  computeLiveSignalRow(rawRows,processed);
+  if(rawRows.length>0)document.getElementById('inspectDate').value=rawRows[rawRows.length-1].computedDateStr;
+  handleDateInspect();document.getElementById('exportBtn').removeAttribute('disabled');document.getElementById('auditCopyBtn').removeAttribute('disabled');resetSyncBtn();
+}
+
+function computeLiveSignalRow(rawRows,processed){
+  if(!rawRows||rawRows.length<35)return null;
+  const triggerIdx=rawRows.length-1,ai=rawRows.length-2;
+  const h3=Math.max(...rawRows.slice(ai-2,ai+1).map(d=>d.High)),l3=Math.min(...rawRows.slice(ai-2,ai+1).map(d=>d.Low));
+  const ph5=Math.max(...rawRows.slice(ai-7,ai-2).map(d=>d.High)),pl5=Math.min(...rawRows.slice(ai-7,ai-2).map(d=>d.Low));
+  const h5=Math.max(...rawRows.slice(ai-4,ai+1).map(d=>d.High)),l5=Math.min(...rawRows.slice(ai-4,ai+1).map(d=>d.Low));
+  const ph10=Math.max(...rawRows.slice(ai-14,ai-4).map(d=>d.High)),pl10=Math.min(...rawRows.slice(ai-14,ai-4).map(d=>d.Low));
+  const h10=Math.max(...rawRows.slice(ai-9,ai+1).map(d=>d.High)),l10=Math.min(...rawRows.slice(ai-9,ai+1).map(d=>d.Low));
+  const ph20=Math.max(...rawRows.slice(ai-29,ai-9).map(d=>d.High)),pl20=Math.min(...rawRows.slice(ai-29,ai-9).map(d=>d.Low));
+  const zph20=Math.max(...rawRows.slice(ai-20,ai).map(d=>d.High)),zpl20=Math.min(...rawRows.slice(ai-20,ai).map(d=>d.Low));
+  const atr14=rawRows.slice(ai-13,ai+1).reduce((s,d)=>s+d.TR,0)/14,ac=rawRows[ai].Close;
+  const tm=((h3-l3)<(ph5-pl5)?1:0)+((h5-l5)<(ph10-pl10)?1:0)+((h10-l10)<(ph20-pl20)?1:0);
+  const stage=tm===3?4:tm===2?3:tm===1?2:1;
+  const pos20=(zph20-zpl20)>0?(ac-zpl20)/(zph20-zpl20):0.5;
+  const zone=pos20<=0.33?"Lower Zone":pos20>=0.66?"Upper Zone":"Middle Zone";
+  const atrSpotNow=ac>0?atr14/ac:atrSpotP50,rawRegime=getRegimeFromSptR(atrSpotNow),regimeState=getConfirmedRegime(rawRegime,processed);
+  const rrcState=classifyRRCState(h3-l3,atr14),bfqState=computeBFQState(rawRows,ai),zpathState=computeZPath(rawRows,ai,zph20,zpl20);
+  const liveRoCState=computeRoCGrid(rawRows,ai,atr14);
+  window._auditCache={anchorClose:ac,atr14,atrSpotNow,atrSpotP50,rawRegime,regimeState,ph20,pl20,zph20,zpl20,pos20,ph10,pl10,ph5,pl5,h10,l10,h5,l5,h3,l3,range3:h3-l3,bfqState,zpathState,rocState:liveRoCState};
+  const dateStr=rawRows[triggerIdx].computedDateStr;
+  const liveRow={Date:dateStr,Close:ac,Stage:stage,Zone:zone,RawRegime:rawRegime,RegimeState:regimeState,RRCState:rrcState,BFQState:bfqState,ZPathState:zpathState,RoCState:liveRoCState,ExpansionHit:null,BlastDay:null,VelWeight:null,HasFutureData:false,IsLiveBar:true};
+  const existing=dateLookupMap[dateStr];if(!existing||!existing.HasFutureData)dateLookupMap[dateStr]=liveRow;
+  return liveRow;
+}
+
+function getPureMeanT2B(outcomes){let hits=outcomes.filter(o=>o.hit===1&&o.blastDay>0);if(!hits.length)return{meanT2B:null,sampleSize:0};return{meanT2B:hits.reduce((a,o)=>a+o.blastDay,0)/hits.length,sampleSize:hits.length};}
+function getProbabilityBadge(relPct,hasFullData,threshold){const t=threshold||NPS_CONFIG.STAND_DOWN_THRESHOLD;if(!hasFullData||relPct===null||relPct===undefined)return{label:"LOW SAMPLE",cls:"bg-slate-100 text-slate-500 border border-slate-300"};if(relPct<t)return{label:"STAND DOWN",cls:"bg-red-100 text-red-700 border border-red-300"};if(relPct>=0.75)return{label:"HIGH CONVICTION",cls:"bg-emerald-100 text-emerald-700 border border-emerald-300"};if(relPct>=0.50)return{label:"FAVORABLE",cls:"bg-blue-100 text-blue-700 border border-blue-300"};if(relPct>=0.35)return{label:"NEUTRAL",cls:"bg-amber-100 text-amber-700 border border-amber-300"};return{label:"WEAK",cls:"bg-orange-100 text-orange-700 border border-orange-300"};}
+
+function renderVarianceDiagnostic(){
+  const panel=document.getElementById('varianceDiagPanel');
+  const cont=document.getElementById('varianceDiagContent');
+  if(!panel||!cont)return;
+  const VARIANCE_FLOOR=0.02;
+  const pillars=[
+    {name:"Stage",   dim:"conditionalStage",   keys:STAGE_KEYS},
+    {name:"Zone",    dim:"conditionalZone",    keys:ZONE_KEYS},
+    {name:"ZPath",   dim:"conditionalZPath",   keys:ZPATH_KEYS},
+    {name:"RRC",     dim:"conditionalRRC",     keys:RRC_KEYS},
+    {name:"BFQ",     dim:"conditionalBFQ",     keys:BFQ_KEYS},
+    {name:"Weekday", dim:"conditionalWeekday", keys:WEEKDAY_KEYS},
+    {name:"WOM",     dim:"conditionalWOM",     keys:WOM_KEYS},
+    {name:"RoC",     dim:"conditionalRoC",     keys:ROC_KEYS.map(String)},
+  ];
+  let html='';
+  pillars.forEach(p=>{
+    const condObj=analyticsStats[p.dim]||{};
+    let allVars=[],floorHits=0,totalBuckets=0;
+    REGIME_KEYS.forEach(r=>{
+      p.keys.forEach(k=>{
+        const outcomes=((condObj[r]||{})[k]||{outcomes:[]}).outcomes;
+        if(outcomes.length<5)return;
+        totalBuckets++;
+        const scores=outcomes.map(o=>velocityWeight(o.blastDay,o.hit));
+        const mean=scores.reduce((s,v)=>s+v,0)/scores.length;
+        const variance=scores.reduce((s,v)=>s+Math.pow(v-mean,2),0)/scores.length;
+        allVars.push({key:`${r}/${k}`,n:outcomes.length,variance,hitFloor:variance<VARIANCE_FLOOR});
+        if(variance<VARIANCE_FLOOR)floorHits++;
+      });
+    });
+    if(!allVars.length){html+=`<div style="font-size:11px;color:#94a3b8;padding:4px 0">${p.name}: no qualifying buckets (n&lt;5)</div>`;return;}
+    allVars.sort((a,b)=>a.variance-b.variance);
+    const varValues=allVars.map(v=>v.variance);
+    const minV=Math.min(...varValues),maxV=Math.max(...varValues),meanV=varValues.reduce((s,v)=>s+v,0)/varValues.length;
+    const floorPct=(floorHits/totalBuckets*100).toFixed(0);
+    const floorColor=floorHits===0?'#16a34a':floorHits/totalBuckets>0.3?'#dc2626':'#d97706';
+    html+=`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:12px;font-weight:700;color:#1e293b">${p.name}</span>
+        <span style="font-size:11px;font-weight:600;color:${floorColor}">${floorHits}/${totalBuckets} floor hits (${floorPct}%)</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:10px;color:#64748b;margin-bottom:8px">
+        <span>Min: <b style="color:#1e293b">${minV.toFixed(4)}</b></span>
+        <span>Mean: <b style="color:#1e293b">${meanV.toFixed(4)}</b></span>
+        <span>Max: <b style="color:#1e293b">${maxV.toFixed(4)}</b></span>
+      </div>
+      <div style="font-size:10px;color:#94a3b8;margin-bottom:4px">Lowest variance buckets (floor risk):</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        ${allVars.slice(0,5).map(v=>`<span style="background:${v.hitFloor?'#fef2f2':'#f8fafc'};border:1px solid ${v.hitFloor?'#fca5a5':'#e2e8f0'};border-radius:4px;padding:2px 6px;font-size:10px;color:${v.hitFloor?'#dc2626':'#475569'}">${v.key} n=${v.n} σ²=${v.variance.toFixed(4)}</span>`).join('')}
+      </div>
+    </div>`;
+  });
+  cont.innerHTML=html;
+  panel.style.display='block';
+}
+
+function renderRegimeIntelligence(activeRegime){
+  const panel=document.getElementById('regimeScorePanel'),cont=document.getElementById('regimeScoreCards');
+  if(!panel||!cont)return;panel.classList.remove('hidden');
+  const RLABELS={"HighSptR":"High Vol / Wide","LowSptR":"Low Vol / Coil"};
+  const RCOLS={"HighSptR":"#ea580c","LowSptR":"#16a34a"};
+  const scores={};
+  REGIME_KEYS.forEach(r=>{const o=(analyticsStats.regime[r]||{outcomes:[]}).outcomes;const vs=bucketVelocityScore(o),t2b=getPureMeanT2B(o),n=o.length;const adjScore=n>0?vs.score:-Infinity;const hits=o.filter(x=>x.blastDay>0).length;scores[r]={vs,t2b,n,adjScore,hitRate:n>0?hits/n*100:null};});
+  const best=REGIME_KEYS.reduce((a,b)=>scores[a].adjScore>scores[b].adjScore?a:b);
+  cont.innerHTML=REGIME_KEYS.map(r=>{const s=scores[r],col=RCOLS[r]||"#94a3b8",isBest=r===best,isActive=r===activeRegime;
+    const bdr=isActive?"border:2px solid #a78bfa;box-shadow:0 0 0 3px #ede9fe;":isBest?"border:2px solid #f59e0b;box-shadow:0 0 0 3px #fef3c7;":"border:1px solid #e2e8f0;";
+    const bestTag=isBest?`<div style="background:#fef9ec;border:1px solid #fcd34d;color:#92400e;font-size:9px;font-weight:900;padding:2px 8px;border-radius:999px;display:inline-block;margin-bottom:6px">⭐ BEST REGIME</div>`:`<div style="height:22px;margin-bottom:6px"></div>`;
+    const activeTag=isActive?` <span style="background:#ede9fe;color:#7c3aed;font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px">◀ ACTIVE</span>`:'';
+    const hitCol=s.hitRate>=70?"#16a34a":s.hitRate>=50?"#d97706":"#dc2626";
+    return`<div style="background:#f8fafc;border-radius:12px;padding:16px 12px;text-align:center;${bdr}">${bestTag}<div style="font-size:13px;font-weight:700;color:${col};margin-bottom:2px">${RLABELS[r]}${activeTag}</div><div style="font-size:10px;color:#94a3b8;margin-bottom:10px;font-family:monospace">${r}</div><div style="font-size:28px;font-weight:900;color:${hitCol}">${s.hitRate!==null?s.hitRate.toFixed(0)+"%":"—"}</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-top:10px"><div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:6px 4px"><div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase">n</div><div style="font-size:15px;font-weight:800;color:#1e293b">${s.n}</div></div><div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:6px 4px"><div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase">T2B</div><div style="font-size:15px;font-weight:800;color:#d97706">${s.t2b.meanT2B!==null?s.t2b.meanT2B.toFixed(1)+"d":"—"}</div></div><div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:6px 4px"><div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase">VelS</div><div style="font-size:15px;font-weight:800;color:#7c3aed">${s.n>0?(s.vs.score*100).toFixed(1):"—"}</div></div></div><div style="font-size:9px;color:#94a3b8;margin-top:8px;font-family:monospace">⚡${s.vs.fast} ⏱${s.vs.mid} 🐢${s.vs.slow} ❌${s.vs.miss}</div></div>`;
+  }).join('');}
+
+function getAllBucketScores(){const MIN_S=5;let scores=[];
+  REGIME_KEYS.forEach(r=>{
+    [[STAGE_KEYS,analyticsStats.conditionalStage],[ZONE_KEYS,analyticsStats.conditionalZone],[RRC_KEYS,analyticsStats.conditionalRRC],[WEEKDAY_KEYS,analyticsStats.conditionalWeekday],[BFQ_KEYS,analyticsStats.conditionalBFQ],[WOM_KEYS,analyticsStats.conditionalWOM],[ZPATH_KEYS,analyticsStats.conditionalZPath],[ROC_KEYS.map(String),analyticsStats.conditionalRoC]].forEach(([keys,condObj])=>{
+      keys.forEach(k=>{const o=((condObj[r]||{})[k]||{outcomes:[]}).outcomes;if(o.length>=MIN_S)scores.push(bucketVelocityScore(o).score);});
+    });
+  });return scores;}
+
+function getPercentileRank(value,data){if(!data||!data.length)return 50;return(data.filter(v=>v<value).length/data.length)*100;}
+
+function rebuildStatsUpToDate(targetDate){
+  analyticsStats.regime={"HighSptR":{outcomes:[]},"LowSptR":{outcomes:[]}};
+  initConditionalStats();
+  for(const e of globalOutcomeLog){
+    if(e.date>targetDate)continue;
+    const{stg,zn,rs,rrc,wd,bfq,wom,zpath,roc,outcome}=e;
+    if(analyticsStats.regime[rs])analyticsStats.regime[rs].outcomes.push(outcome);
+    if(analyticsStats.conditionalStage[rs]?.[stg])analyticsStats.conditionalStage[rs][stg].outcomes.push(outcome);
+    if(analyticsStats.conditionalZone[rs]?.[zn])analyticsStats.conditionalZone[rs][zn].outcomes.push(outcome);
+    if(rrc&&analyticsStats.conditionalRRC[rs]?.[rrc])analyticsStats.conditionalRRC[rs][rrc].outcomes.push(outcome);
+    if(wd>=1&&wd<=5&&analyticsStats.conditionalWeekday[rs]?.[wd])analyticsStats.conditionalWeekday[rs][wd].outcomes.push(outcome);
+    if(bfq&&analyticsStats.conditionalBFQ[rs]?.[bfq])analyticsStats.conditionalBFQ[rs][bfq].outcomes.push(outcome);
+    if(wom&&analyticsStats.conditionalWOM[rs]?.[wom])analyticsStats.conditionalWOM[rs][wom].outcomes.push(outcome);
+    if(zpath!==undefined&&analyticsStats.conditionalZPath[rs]?.[zpath]!==undefined)analyticsStats.conditionalZPath[rs][zpath].outcomes.push(outcome);
+    if(roc!==undefined&&roc!==null&&analyticsStats.conditionalRoC[rs]?.[roc]!==undefined)analyticsStats.conditionalRoC[rs][String(roc)].outcomes.push(outcome);
+  }
+}
+
+function handleDateInspect(){
+  const rawVal=document.getElementById('inspectDate').value;const cleanedKey=cleanDateString(rawVal);let d=dateLookupMap[cleanedKey];
+  const allKeys=Object.keys(dateLookupMap).sort();if(!d){const nk=allKeys.filter(k=>k<=cleanedKey).pop();d=nk?dateLookupMap[nk]:globalProcessedData[globalProcessedData.length-1];}if(!d)return;
+  rebuildStatsUpToDate(cleanDateString(d.Date));renderConditionalMatrices(null,null,null,null,null,null,null,null);
+  if(d.IsLiveBar){document.getElementById('signalDateBadge').innerHTML=`${d.Date} <span class="pill bg-emerald-100 text-emerald-700 border border-emerald-300 ml-2">⚡ LIVE</span>`;}else{document.getElementById('signalDateBadge').innerText=`Target: ${d.Date}`;}
+  document.getElementById('pZoneContext').innerText=d.Zone;document.getElementById('pZonePos').innerText=d.Zone==="Lower Zone"?"Below 33rd pct of 20d range":d.Zone==="Upper Zone"?"Above 66th pct of 20d range":"Middle of 20d range";
+  const stageLabels={4:"All 3 Compressed",3:"Any 2 Compressed",2:"1 Compressed",1:"No Compression"};
+  document.getElementById('pStageContext').innerText=`Stage ${d.Stage}`;document.getElementById('pStagePos').innerText=stageLabels[d.Stage]||"—";
+  const rrcCtx={"Deep":"Range highly contracted","Neutral":"Range normal width","Expansion":"Range expanding"};
+  document.getElementById('pRRCContext').innerText=d.RRCState||"—";document.getElementById('pRRCPos').innerText=rrcCtx[d.RRCState]||"—";
+  document.getElementById('pBFQContext').innerText=d.BFQState||"Normal";document.getElementById('pBFQPos').innerText=(d.BFQState||"Normal")==="Exhausted"?">2 blasts in 21d · Energy depleted":"≤2 blasts in 21d · Fresh blast potential";
+  document.getElementById('pRegimeContext').innerText=d.RegimeState||"—";document.getElementById('pRegimePos').innerText=d.RegimeState==="HighSptR"?`ATR/Spot ≥ P50 (${(atrSpotP50*100).toFixed(2)}%) · High Vol / Wide`:`ATR/Spot < P50 (${(atrSpotP50*100).toFixed(2)}%) · Low Vol / Coil`;
+  const zpathState=d.ZPathState!==undefined?d.ZPathState:0;
+  const zpathCtx={0:"Rotational — No directional momentum",1:"Bearish drift — Fade setup into anchor",2:"Bullish lock — Launchpad / institutional run"};
+  document.getElementById('pZPathContext').innerText=ZPATH_NAMES[zpathState]||"—";document.getElementById('pZPathPos').innerText=zpathCtx[zpathState]||"—";
+  const inspectWd=new Date(d.Date).getUTCDay(),inspectWOM=getWeekOfMonth(d.Date);
+  const dayNames={1:"Monday",2:"Tuesday",3:"Wednesday",4:"Thursday",5:"Friday"};
+  document.getElementById('pWeekdayContext').innerText=dayNames[inspectWd]||"Weekend";document.getElementById('pWeekdayPos').innerText=`Day ${inspectWd} of trading week`;
+  document.getElementById('pWOMContext').innerText=`Week ${inspectWOM}`;document.getElementById('pWOMPos').innerText=`WOM Bucket ${inspectWOM} (calendar index)`;
+  // RoC UI
+  const rocState=d.RoCState!==undefined?d.RoCState:0;
+  const rocCtx={2:"Velocity Lock — B3 bullish & full trajectory rising B1→B2→B3",1:"Momentum Exhaustion — B3 bearish or trajectory collapsed from bullish start",0:"Squeeze / Churn — no directional grid bias"};
+  document.getElementById('pRoCContext').innerText=ROC_NAMES[rocState]||"—";document.getElementById('pRoCPos').innerText=`RoCGrid: State ${rocState} · ${rocCtx[rocState]||'—'}`;
+  let prob=ProbabilityEngine(d.Stage,d.Zone,d.RegimeState,d.RRCState,inspectWd,d.BFQState,inspectWOM,zpathState,rocState);
+  const MIN_S=5;
+  const activeW=[prob.stageSamples,prob.zoneSamples,prob.rrcSamples,prob.weekdaySamples,prob.bfqSamples,prob.womSamples,prob.zpathSamples,prob.rocSamples].filter(n=>n>=MIN_S).length;
+  let hasFullData=prob.regimeSamples>=5&&activeW>=1;
+  const allHistScores=getAllBucketScores();
+  function renderPillar(barId,valId,detId,score,vs,n){const bar=document.getElementById(barId),val=document.getElementById(valId),det=document.getElementById(detId);if(!bar||!val||!det)return;if(n<5){bar.style.width="50%";val.innerText="⚠️ Low n";det.innerText=`n=${n} — skipped (n<5)`;return;}const pct=getPercentileRank(score,allHistScores);bar.style.width=pct.toFixed(1)+"%";const rank=Math.round(pct);const sfx=[11,12,13].includes(rank)?'th':rank%10===1?'st':rank%10===2?'nd':rank%10===3?'rd':'th';val.innerText=`${rank}${sfx} Pct`;det.innerText=`n=${n} · raw ${score.toFixed(1)}p · ⚡${vs.fast}F ⏱${vs.mid}M 🐢${vs.slow}S ❌${vs.miss}X`;}
+  renderPillar('pillarStageBar','pillarStageValue','pillarStageDetail',prob.stageScore,prob.stageVS,prob.stageSamples);
+  renderPillar('pillarZoneBar','pillarZoneValue','pillarZoneDetail',prob.zoneScore,prob.zoneVS,prob.zoneSamples);
+  renderPillar('pillarZPathBar','pillarZPathValue','pillarZPathDetail',prob.zpathScore,prob.zpathVS,prob.zpathSamples);
+  renderPillar('pillarRRCBar','pillarRRCValue','pillarRRCDetail',prob.rrcScore,prob.rrcVS,prob.rrcSamples);
+  renderPillar('pillarWeekdayBar','pillarWeekdayValue','pillarWeekdayDetail',prob.weekdayScore,prob.weekdayVS,prob.weekdaySamples);
+  renderPillar('pillarBFQBar','pillarBFQValue','pillarBFQDetail',prob.bfqScore,prob.bfqVS,prob.bfqSamples);
+  renderPillar('pillarWOMBar','pillarWOMValue','pillarWOMDetail',prob.womScore,prob.womVS,prob.womSamples);
+  renderPillar('pillarRoCBar','pillarRoCValue','pillarRoCDetail',prob.rocScore,prob.rocVS,prob.rocSamples);
+  let band,multText,noteText,relPct;if(!hasFullData){relPct=null;multText="STAND DOWN";noteText="Insufficient regime history (need ≥5) or no qualifying pillar (need n≥5).";}else{band=getDynamicAllocation(prob.masterP,d.RegimeState);relPct=band.relPct;multText=band.mult;noteText=band.note;}
+  const hitColors={good:"#16a34a",neutral:"#d97706",bad:"#dc2626"};
+  const regimeThreshold = d.RegimeState==="HighSptR" ? 0.15 : 0.35;
+  const masterColor=relPct===null||relPct<regimeThreshold?hitColors.bad:relPct>=0.75?hitColors.good:relPct>=0.50?"#2563eb":relPct>=0.35?hitColors.neutral:"#ea580c";
+  document.getElementById('masterProbabilityScore').innerText=prob.masterP.toFixed(1);
+  const mb=document.getElementById('masterProbBar');mb.style.width=Math.max(0,prob.masterP).toFixed(1)+"%";mb.style.background=masterColor;
+  const badge=getProbabilityBadge(relPct,hasFullData,regimeThreshold);const bEl=document.getElementById('pceBadge');bEl.innerText=badge.label;bEl.className=`font-black px-2 py-0.5 rounded-lg text-sm ${badge.cls}`;
+  document.getElementById('pExpiry').innerText=relPct!==null?(relPct*100).toFixed(1)+"%":"—";
+  const mv=document.getElementById('signalMultiplierValue');mv.innerText=multText;mv.style.color=masterColor;document.getElementById('signalActionNote').innerText=noteText;
+  const db=document.getElementById('pceDecisionBlock');db.className=`stat-tile space-y-4 border-2 transition-all ${hasFullData&&band?band.border:'border-slate-200'} ${hasFullData&&band?band.bg:''}`;
+  if(window._auditCache){window._auditCache.prob={masterP:prob.masterP.toFixed(1),relPct:relPct!==null?(relPct*100).toFixed(1)+"%":"—",badge:badge.label,totalN:prob.totalN,stageContrib:prob.stageContrib,zoneContrib:prob.zoneContrib,zpathContrib:prob.zpathContrib,rrcContrib:prob.rrcContrib,bfqContrib:prob.bfqContrib,weekdayContrib:prob.weekdayContrib,womContrib:prob.womContrib,rocContrib:prob.rocContrib,stageSamples:prob.stageSamples,zoneSamples:prob.zoneSamples,zpathSamples:prob.zpathSamples,rrcSamples:prob.rrcSamples,bfqSamples:prob.bfqSamples,weekdaySamples:prob.weekdaySamples,womSamples:prob.womSamples,rocSamples:prob.rocSamples};}
+  function calcHR(o){if(!o||!o.length)return null;const h=o.filter(x=>x.blastDay>0).length;return{rate:h/o.length*100,n:o.length};}
+  function setHitEl(hitId,nId,hr){const h=document.getElementById(hitId),n=document.getElementById(nId);if(!h||!n)return;if(hr){h.innerText=hr.rate.toFixed(0)+"%";h.style.color=hr.rate>=60?hitColors.good:hr.rate>=40?hitColors.neutral:hitColors.bad;n.innerText=`n=${hr.n}`;}else{h.innerText="—";h.style.color="";n.innerText="n=—";}}
+  const csO=((analyticsStats.conditionalStage[d.RegimeState]||{})[d.Stage]||{outcomes:[]}).outcomes;
+  const czO=((analyticsStats.conditionalZone[d.RegimeState]||{})[d.Zone]||{outcomes:[]}).outcomes;
+  const czpO=((analyticsStats.conditionalZPath[d.RegimeState]||{})[zpathState]||{outcomes:[]}).outcomes;
+  const crO=((analyticsStats.conditionalRRC[d.RegimeState]||{})[d.RRCState||"Neutral"]||{outcomes:[]}).outcomes;
+  const cwO=(inspectWd>=1&&inspectWd<=5&&(analyticsStats.conditionalWeekday[d.RegimeState]||{})[inspectWd])?(analyticsStats.conditionalWeekday[d.RegimeState][inspectWd].outcomes):[];
+  const cbO=((analyticsStats.conditionalBFQ[d.RegimeState]||{})[d.BFQState||"Normal"]||{outcomes:[]}).outcomes;
+  const cwomO=((analyticsStats.conditionalWOM[d.RegimeState]||{})[inspectWOM]||{outcomes:[]}).outcomes;
+  const crocO=((analyticsStats.conditionalRoC[d.RegimeState]||{})[String(rocState)]!==undefined?(analyticsStats.conditionalRoC[d.RegimeState][String(rocState)]):{outcomes:[]}).outcomes;
+  setHitEl('traderStageHit','traderStageN',calcHR(csO));setHitEl('traderZoneHit','traderZoneN',calcHR(czO));setHitEl('traderZPathHit','traderZPathN',calcHR(czpO));setHitEl('traderRRCHit','traderRRCN',calcHR(crO));setHitEl('traderWeekdayHit','traderWeekdayN',calcHR(cwO));setHitEl('traderBFQHit','traderBFQN',calcHR(cbO));
+  setHitEl('traderWOMHit','traderWOMN',calcHR(cwomO));setHitEl('traderRoCHit','traderRoCN',calcHR(crocO));
+  const allHRs=[calcHR(csO),calcHR(czO),calcHR(czpO),calcHR(crO),calcHR(cwO),calcHR(cbO),calcHR(cwomO),calcHR(crocO)].filter(Boolean);const combEl=document.getElementById('traderHitRate');
+  if(allHRs.length){const totalN=allHRs.reduce((s,h)=>s+h.n,0);const comb=totalN>0?allHRs.reduce((s,h)=>s+h.rate*h.n,0)/totalN:allHRs.reduce((s,h)=>s+h.rate,0)/allHRs.length;combEl.innerText=comb.toFixed(0)+"%";combEl.style.color=comb>=60?hitColors.good:comb>=40?hitColors.neutral:hitColors.bad;}else{combEl.innerText="—";combEl.style.color="";}
+  const validT2Bs=[getPureMeanT2B(csO),getPureMeanT2B(czO),getPureMeanT2B(czpO),getPureMeanT2B(crO),getPureMeanT2B(cwO),getPureMeanT2B(cbO),getPureMeanT2B(cwomO),getPureMeanT2B(crocO)].filter(t=>t.meanT2B!==null);
+  const hEl=document.getElementById('masterBlastHorizon');if(validT2Bs.length){hEl.innerText=(validT2Bs.reduce((s,t)=>s+t.meanT2B,0)/validT2Bs.length).toFixed(1)+"d";}else hEl.innerText="—";
+  document.getElementById('pceWinRateText').innerText=`S:${prob.stageContrib.toFixed(0)} Z:${prob.zoneContrib.toFixed(0)} ZP:${prob.zpathContrib.toFixed(0)} RRC:${prob.rrcContrib.toFixed(0)} Wd:${prob.weekdayContrib.toFixed(0)} BFQ:${prob.bfqContrib.toFixed(0)} WOM:${prob.womContrib.toFixed(0)} RC:${prob.rocContrib.toFixed(0)}p`;
+  renderConditionalMatrices(d.RegimeState,d.Stage,d.Zone,d.RRCState,inspectWd,d.BFQState,inspectWOM,zpathState,rocState);
+  renderRegimeIntelligence(d.RegimeState);
+}
+
+function renderConditionalMatrices(activeRegime,activeStage,activeZone,activeRRC,activeWeekday,activeBFQ,activeWOM,activeZPath,activeRoC){
+  const STAGE_LABELS={4:"All Compressed",3:"Any 2",2:"1 Compressed",1:"No Compression"};
+  const RRC_SUBS={"Deep":"Range3 ≤ P33","Neutral":"P33 < Range3 ≤ P66","Expansion":"Range3 > P66"};
+  const BFQ_SUBS={"Normal":"≤2 blasts in 21d","Exhausted":">2 blasts in 21d"};
+  const ZPATH_SUBS={0:"Rotational / Chop",1:"Bearish drift / Fade",2:"Bullish lock / Launchpad"};
+  const RMETA={"HighSptR":{col:"#ea580c",label:"High Vol / Wide",sub:`ATR/Spot ≥ P50 (${(atrSpotP50*100).toFixed(2)}%) · Momentum`},"LowSptR":{col:"#16a34a",label:"Low Vol / Coil",sub:`ATR/Spot < P50 (${(atrSpotP50*100).toFixed(2)}%) · Compression`}};
+  function hc(r){return r===null?"#94a3b8":r>=70?"#16a34a":r>=50?"#d97706":"#dc2626";}
+  function buildCard(outcomes,label,sub,isActive){
+    const t2b=getPureMeanT2B(outcomes),n=outcomes.length,hits=outcomes.filter(o=>o.blastDay>0).length;
+    const rate=n>0?hits/n*100:null,t2bStr=t2b.meanT2B!==null?t2b.meanT2B.toFixed(1)+"d":"—",hitStr=rate!==null?rate.toFixed(0)+"%":"—";
+    const bdr=isActive?"border:2px solid #a78bfa;box-shadow:0 0 0 3px #ede9fe;":"border:1px solid #e2e8f0;";
+    const base="background:#f8fafc;border-radius:12px;padding:14px 10px;flex:1;min-width:0;text-align:center;"+bdr;
+    if(n===0)return`<div style="${base}opacity:.4"><div style="font-size:11px;font-weight:700;color:#64748b">${label}</div><div style="font-size:10px;color:#94a3b8">${sub}</div><div style="font-size:18px;font-weight:900;color:#cbd5e1;margin-top:4px">—</div><div style="font-size:10px;color:#94a3b8">no data</div></div>`;
+    return`<div style="${base}"><div style="font-size:11px;font-weight:700;color:#1e293b">${label}</div><div style="font-size:10px;color:#94a3b8;margin-bottom:4px">${sub}</div><div style="font-size:22px;font-weight:900;color:${hc(rate)}">${hitStr}</div><div style="display:flex;justify-content:space-between;margin-top:8px"><span style="font-size:10px;color:#d97706;font-weight:700">⏱ ${t2bStr}</span><span style="font-size:10px;color:#94a3b8">n=${n}</span></div></div>`;
+  }
+  function buildSection(containerId,bucketKeys,condObj,labelFn,subFn,activeBucket){
+    const cont=document.getElementById(containerId);if(!cont)return;
+    let best=bucketKeys[0],bestV=-Infinity;
+    bucketKeys.forEach(k=>{
+      // Use active regime only if set — else pool across all regimes
+      let allO=[];
+      if(activeBucket!==null&&activeBucket!==undefined&&activeRegime){
+        allO=((condObj[activeRegime]||{})[k]||{outcomes:[]}).outcomes;
+      } else {
+        REGIME_KEYS.forEach(r=>{const o=((condObj[r]||{})[k]||{outcomes:[]}).outcomes;allO=allO.concat(o);});
+      }
+      const n=allO.length,v=n>=5?bucketVelocityScore(allO).score:-Infinity;
+      if(v>bestV){bestV=v;best=k;}
+    });
+    const bestLabel=labelFn(best),bestSub=subFn(best);
+    const bestNote=activeRegime?`highest Velocity Score in ${activeRegime}`:`highest Velocity Score across all regimes`;
+    cont.innerHTML=`<div style="background:#fef9ec;border:1px solid #fcd34d;border-radius:10px;padding:8px 14px;margin-bottom:14px;font-size:12px;font-weight:800;color:#92400e;">⭐ ${bestLabel}${bestSub?" — "+bestSub:""} IS THE BEST SETUP <span style="font-weight:400;font-size:11px;color:#b45309;margin-left:4px">· ${bestNote}</span></div>`;
+    REGIME_KEYS.forEach(r=>{const m=RMETA[r]||{col:"#94a3b8",label:r,sub:""};const isAR=r===activeRegime;const opacity=(!isAR&&activeRegime)?"opacity:.45;":"";const sc=isAR?"#a78bfa":m.col;
+      const cards=bucketKeys.map(k=>{const o=((condObj[r]||{})[k]||{outcomes:[]}).outcomes;return buildCard(o,labelFn(k),subFn(k),isAR&&String(k)===String(activeBucket));}).join("");
+      cont.innerHTML+=`<div style="margin-bottom:14px;${opacity}"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div style="width:3px;min-height:32px;border-radius:999px;background:${sc}"></div><div><div style="font-size:13px;font-weight:700;color:${isAR?"#7c3aed":m.col}">${m.label}${isAR?" ◀ ACTIVE":""}</div><div style="font-size:10px;color:#94a3b8;font-family:monospace">${m.sub}</div></div></div><div style="display:flex;gap:8px">${cards}</div></div>`;
+    });
+  }
+  buildSection("regimeStageMatrixCards",STAGE_KEYS,analyticsStats.conditionalStage,k=>"S"+k,k=>STAGE_LABELS[k]||"",activeStage);
+  buildSection("regimeZoneMatrixCards",ZONE_KEYS,analyticsStats.conditionalZone,k=>k.replace(" Zone",""),k=>"",activeZone);
+  buildSection("regimeZPathMatrixCards",ZPATH_KEYS,analyticsStats.conditionalZPath,k=>ZPATH_NAMES[k],k=>ZPATH_SUBS[k]||"",activeZPath);
+  buildSection("regimeRRCMatrixCards",RRC_KEYS,analyticsStats.conditionalRRC,k=>k,k=>RRC_SUBS[k]||"",activeRRC);
+  buildSection("regimeWeekdayMatrixCards",WEEKDAY_KEYS,analyticsStats.conditionalWeekday,k=>WEEKDAY_NAMES[k]||k,k=>"",activeWeekday);
+  buildSection("regimeBFQMatrixCards",BFQ_KEYS,analyticsStats.conditionalBFQ,k=>BFQ_NAMES[k],k=>BFQ_SUBS[k]||"",activeBFQ);
+  buildSection("regimeWOMMatrixCards",WOM_KEYS,analyticsStats.conditionalWOM,k=>WOM_NAMES[k]||k,k=>"",activeWOM);
+  buildSection("regimeRoCMatrixCards",ROC_KEYS.map(String),analyticsStats.conditionalRoC,k=>ROC_NAMES[k]||k,k=>{return k==="2"?"B3≥0.25 & B3≥B2≥B1":k==="1"?"B3≤-0.25 or B3<B1-0.5":"No directional grid bias";},activeRoC!==undefined&&activeRoC!==null?String(activeRoC):null);
+  renderVarianceDiagnostic();
+}
+
+function exportCSV(){if(!globalProcessedData.length)return;const flattened=globalProcessedData.filter(row=>!row.IsLiveBar).map(row=>{const p=row._prob||{};const{_prob,IsLiveBar,...rest}=row;const activePillars=[p.stageSamples,p.zoneSamples,p.zpathSamples,p.rrcSamples,p.weekdaySamples,p.bfqSamples,p.womSamples,p.rocSamples].filter(n=>n>=5).length;return{...rest,Prob_StageSamples:p.stageSamples??'',Prob_ZoneSamples:p.zoneSamples??'',Prob_ZPathSamples:p.zpathSamples??'',Prob_RRCSamples:p.rrcSamples??'',Prob_WeekdaySamples:p.weekdaySamples??'',Prob_BFQSamples:p.bfqSamples??'',Prob_WOMSamples:p.womSamples??'',Prob_RoCSamples:p.rocSamples??'',Prob_TotalN:p.totalN??'',Prob_ActivePillars:p.totalN!=null?activePillars:''};});let blob=new Blob([Papa.unparse(flattened)],{type:'text/csv;charset=utf-8;'});let link=document.createElement("a");link.setAttribute("href",URL.createObjectURL(blob));link.setAttribute("download","nps_v24_data.csv");document.body.appendChild(link);link.click();document.body.removeChild(link);}
+
+function copyAuditToClipboard(){const btn=document.getElementById('auditCopyBtn');try{const lines=[],sep="─".repeat(52),ts=new Date().toISOString().replace('T',' ').slice(0,19)+' UTC';lines.push("═".repeat(52));lines.push("  NPS v24 AUDIT SNAPSHOT · "+ts);lines.push("═".repeat(52));lines.push("");lines.push("LIVE SIGNAL — 8 PILLARS · PRECISION-WEIGHTED MasterP");lines.push(sep);const ac=window._auditCache||{},ap=ac.prob||{};lines.push("Zone             : "+(document.getElementById('pZoneContext')?.innerText||'—'));lines.push("Stage            : "+(document.getElementById('pStageContext')?.innerText||'—'));lines.push("ZPath            : "+(document.getElementById('pZPathContext')?.innerText||'—')+" · "+(document.getElementById('pZPathPos')?.innerText||'—'));lines.push("RRC              : "+(document.getElementById('pRRCContext')?.innerText||'—'));lines.push("BFQ              : "+(document.getElementById('pBFQContext')?.innerText||'—'));lines.push("RoC Grid         : "+(document.getElementById('pRoCContext')?.innerText||'—')+" · "+(document.getElementById('pRoCPos')?.innerText||'—'));lines.push("Regime           : "+(document.getElementById('pRegimeContext')?.innerText||'—'));lines.push("Anchor Close     : "+(ac.anchorClose!=null?ac.anchorClose.toFixed(2):'—'));lines.push("ATR14            : "+(ac.atr14!=null?ac.atr14.toFixed(4):'—'));lines.push("ATR/Spot         : "+(ac.atrSpotNow!=null?(ac.atrSpotNow*100).toFixed(4)+'%':'—'));lines.push("");lines.push("── 8-Pillar Precision-Weighted MasterP Breakdown ──");lines.push(`Stage  : ${ap.stageContrib!=null?Number(ap.stageContrib).toFixed(1):'—'}p  (n=${ap.stageSamples||0})`);lines.push(`Zone   : ${ap.zoneContrib!=null?Number(ap.zoneContrib).toFixed(1):'—'}p  (n=${ap.zoneSamples||0})`);lines.push(`ZPath  : ${ap.zpathContrib!=null?Number(ap.zpathContrib).toFixed(1):'—'}p  (n=${ap.zpathSamples||0})`);lines.push(`RRC    : ${ap.rrcContrib!=null?Number(ap.rrcContrib).toFixed(1):'—'}p  (n=${ap.rrcSamples||0})`);lines.push(`BFQ    : ${ap.bfqContrib!=null?Number(ap.bfqContrib).toFixed(1):'—'}p  (n=${ap.bfqSamples||0})`);lines.push(`Weekday: ${ap.weekdayContrib!=null?Number(ap.weekdayContrib).toFixed(1):'—'}p  (n=${ap.weekdaySamples||0})`);lines.push(`WOM    : ${ap.womContrib!=null?Number(ap.womContrib).toFixed(1):'—'}p  (n=${ap.womSamples||0})`);lines.push(`RoC    : ${ap.rocContrib!=null?Number(ap.rocContrib).toFixed(1):'—'}p  (n=${ap.rocSamples||0})`);lines.push("");lines.push("MasterP Score    : "+(ap.masterP!=null?ap.masterP:'—')+"%");lines.push("Relative Rank    : "+(ap.relPct||'—'));lines.push("Signal Badge     : "+(ap.badge||'—'));lines.push("Blast Horizon    : "+(document.getElementById('masterBlastHorizon')?.innerText||'—'));lines.push("Total N          : "+(ap.totalN||'—'));lines.push("");lines.push("BACKTEST SUMMARY");lines.push(sep);const total=globalProcessedData.length;if(total>0){const hits=globalProcessedData.filter(r=>r.ExpansionHit==1).length;lines.push("Total Anchor Bars: "+total);lines.push("Expansion Hits   : "+hits+" ("+(hits/total*100).toFixed(1)+"%)");lines.push("MasterP Range    : HighSptR="+historicalScoreBounds["HighSptR"].min.toFixed(1)+"–"+historicalScoreBounds["HighSptR"].max.toFixed(1)+" | LowSptR="+historicalScoreBounds["LowSptR"].min.toFixed(1)+"–"+historicalScoreBounds["LowSptR"].max.toFixed(1));}lines.push("");lines.push("═".repeat(52));lines.push("  END OF AUDIT");lines.push("═".repeat(52));const text=lines.join('\n');navigator.clipboard.writeText(text).then(()=>{btn.innerText='✅ Copied!';setTimeout(()=>{btn.innerText='📋 Copy Audit';},2000);}).catch(()=>{const ta=document.createElement('textarea');ta.value=text;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);btn.innerText='✅ Copied!';setTimeout(()=>{btn.innerText='📋 Copy Audit';},2000);});}catch(err){alert('Audit error: '+err.message);btn.innerText='📋 Copy Audit';}}
+</script>
+</body>
+</html>
