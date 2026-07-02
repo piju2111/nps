@@ -1,0 +1,1782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Engine B v6 — Evidence Engine</title>
+<style>
+/* ── CHANGELOG ────────────────────────────────────────────────────────────────
+   v6.0  FULL ARCHITECTURAL REFACTOR — Historical Evidence Learning Engine
+   ✓ Removed: B1/B2/B3 buckets, pattern signatures, pattern probability matching
+   ✓ Kept (locked foundation): CSV import, wash, ATR14, Regime Engine,
+                                 Blast detection (jump-to-blast-row)
+   ✓ NEW: Miss cycle detection (advance +1 row, 10-day forward window, no blast)
+   ✓ NEW: Sense Engine — daily Quietness {Quiet,Mid,Loud} and
+           Direction {Down,Range,Up} labels, regime-specific p33/p66 thresholds
+   ✓ NEW: Evidence Engine — Single-Day, Streak (2-3 day), Transition evidence
+           objects; each tracks Blast Count / Miss Count / Likelihood Ratio
+           with Laplace smoothing and minimum sample threshold (default 5)
+   ✓ NEW: Blast Readiness Index (BRI) — Naive-Bayes log-likelihood aggregation
+           of all active evidence objects, mapped to 0–100, regime-specific
+   ✓ NEW: Chunked, interrupt-resilient processing with progress indicator
+           (deterministic, no browser persistence — recompute on reload)
+──────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --bg:#0f0f0e; --surface:#171715; --surface2:#1e1e1c; --surface3:#252523;
+  --border:rgba(255,255,255,0.08); --border-strong:rgba(255,255,255,0.14);
+  --text-primary:#f0efe8; --text-secondary:#9b9a93; --text-muted:#636259;
+  --accent:#2a78d6; --accent-bg:rgba(42,120,214,0.12); --accent-border:rgba(42,120,214,0.3);
+  --green:#1baf7a; --amber:#eda100; --red:#e34948;
+  --mono:'JetBrains Mono','Fira Code',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text-primary);font-family:-apple-system,'Inter',system-ui,sans-serif;font-size:14px;line-height:1.6;min-height:100vh;}
+.app{max-width:1100px;margin:0 auto;padding:32px 24px;}
+
+/* header */
+.topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:28px;flex-wrap:wrap;}
+.engine-badge{background:var(--accent-bg);border:0.5px solid var(--accent-border);color:var(--accent);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:4px;}
+.topbar-title{display:flex;align-items:center;gap:10px;}
+h1{font-size:21px;font-weight:500;letter-spacing:-.02em;}
+.subtitle{font-size:13px;color:var(--text-muted);margin-top:3px;}
+.sh{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+.sh h2{font-size:14px;font-weight:500;color:var(--text-secondary);}
+
+/* status / error */
+.status-bar{background:var(--surface2);border:0.5px solid var(--border);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text-secondary);margin-bottom:18px;display:none;align-items:center;gap:10px;}
+.status-bar.active{display:flex;}
+.spinner{width:14px;height:14px;border:2px solid var(--border-strong);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.progress-track{flex:1;height:4px;background:var(--surface3);border-radius:2px;overflow:hidden;}
+.progress-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .15s;width:0%;}
+.error-bar{background:rgba(227,73,72,0.1);border:0.5px solid rgba(227,73,72,0.3);color:var(--red);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:18px;display:none;}
+.error-bar.active{display:block;}
+.results{display:none;}.results.active{display:block;}
+.empty-state{text-align:center;padding:60px 0;color:var(--text-muted);font-size:13px;}
+
+/* data source panel */
+.data-source-panel{background:var(--surface);border:0.5px solid var(--border);border-radius:10px;margin-bottom:22px;overflow:hidden;}
+.ds-tabs{display:flex;border-bottom:0.5px solid var(--border);}
+.ds-tab{font-size:12px;padding:9px 16px;background:none;border:none;color:var(--text-muted);cursor:pointer;transition:all .12s;border-bottom:2px solid transparent;margin-bottom:-1px;}
+.ds-tab:hover{color:var(--text-secondary);}
+.ds-tab.active{color:var(--text-primary);border-bottom-color:var(--accent);}
+.ds-body{padding:16px;}
+.url-row{display:flex;gap:8px;}
+.url-row input{flex:1;background:var(--surface2);border:0.5px solid var(--border-strong);border-radius:6px;padding:8px 12px;color:var(--text-primary);font-size:13px;outline:none;font-family:var(--mono);transition:border-color .15s;}
+.url-row input:focus{border-color:var(--accent);}
+.btn-fetch{background:var(--surface3);border:0.5px solid var(--border-strong);border-radius:6px;padding:8px 16px;color:var(--text-secondary);font-size:13px;cursor:pointer;transition:all .12s;white-space:nowrap;}
+.btn-fetch:hover{color:var(--text-primary);}
+.btn-fetch.loading{opacity:.5;cursor:not-allowed;}
+.ds-hint{font-size:11px;color:var(--text-muted);margin-top:8px;}
+.file-zone{border:1.5px dashed var(--border-strong);border-radius:8px;padding:28px;text-align:center;cursor:pointer;transition:all .15s;position:relative;}
+.file-zone:hover,.file-zone.drag{border-color:var(--accent);background:var(--accent-bg);}
+.file-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;}
+.file-zone p{font-size:13px;color:var(--text-secondary);}
+
+/* wash report */
+.wash-report{background:var(--surface);border:0.5px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:18px;font-size:12px;}
+.wash-report .wr-title{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:8px;}
+.wr-line{display:flex;justify-content:space-between;padding:2px 0;color:var(--text-secondary);}
+.wr-line.warn{color:var(--amber);}
+.wr-line.ok{color:var(--green);}
+
+/* controls */
+.controls{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;margin-bottom:22px;align-items:end;}
+.field label{display:block;font-size:11px;color:var(--text-muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.07em;}
+.field input{width:100%;background:var(--surface2);border:0.5px solid var(--border-strong);border-radius:6px;padding:8px 11px;color:var(--text-primary);font-size:13px;outline:none;transition:border-color .15s;}
+.field input:focus{border-color:var(--accent);}
+.btn-run{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:8px 22px;font-size:13px;font-weight:500;cursor:pointer;transition:opacity .15s,transform .1s;white-space:nowrap;height:36px;}
+.btn-run:hover{opacity:.88;}.btn-run:active{transform:scale(.98);}.btn-run:disabled{opacity:.38;cursor:not-allowed;}
+
+.csv-btn{background:var(--surface2);border:0.5px solid var(--border-strong);border-radius:6px;padding:6px 14px;color:var(--text-secondary);font-size:12px;cursor:pointer;transition:all .12s;}
+.csv-btn:hover{background:var(--surface3);color:var(--text-primary);}
+
+/* summary */
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:22px;}
+.mc{background:var(--surface);border:0.5px solid var(--border);border-radius:10px;padding:14px 16px;}
+.mc .ml{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;}
+.mc .mv{font-size:21px;font-weight:500;font-variant-numeric:tabular-nums;color:var(--text-primary);line-height:1.2;}
+.mc .ms{font-size:11px;color:var(--text-secondary);margin-top:3px;}
+
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+.tag{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.04em;padding:2px 7px;border-radius:3px;}
+.tag-hi{background:rgba(27,175,122,.15);color:var(--green);}
+.tag-lo{background:rgba(99,98,89,.15);color:var(--text-secondary);}
+.tag-up{background:rgba(27,175,122,.12);color:var(--green);}
+.tag-dn{background:rgba(227,73,72,.12);color:var(--red);}
+.tag-rb{background:rgba(99,98,89,.18);color:var(--text-secondary);}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px;}
+
+/* today / BRI live panel */
+.today-card{background:var(--surface);border:0.5px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:22px;}
+.tc-cell .tc-label{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:3px;}
+.tc-cell .tc-val{font-size:18px;font-weight:500;font-variant-numeric:tabular-nums;}
+.live-meta{display:flex;flex-wrap:wrap;gap:16px;padding:14px 18px;border-bottom:0.5px solid var(--border);}
+
+/* ── BRI card (v6.2 — score + bar + status, no raw math) ─────────────────── */
+.bri-card{margin:14px 18px 18px;padding:20px 22px;border-radius:10px;border:0.5px solid var(--border);background:var(--surface2);}
+.bri-label{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:6px;}
+.bri-score-row{display:flex;align-items:baseline;gap:6px;}
+.bri-value{font-size:42px;font-weight:600;line-height:1;}
+.bri-max{font-size:16px;color:var(--text-muted);font-weight:500;}
+.bri-bar-bg{height:10px;background:var(--surface3);border-radius:5px;margin-top:12px;overflow:hidden;}
+.bri-bar-fill{height:100%;border-radius:5px;transition:width .3s;}
+.bri-status-badge{display:inline-block;font-size:12px;font-weight:600;padding:4px 12px;border-radius:5px;margin-top:12px;}
+/* locked thresholds: 0-30 Low · 31-60 Neutral · 61-80 Elevated · 81-100 High */
+.bri-low .bri-value,.bri-low .bri-bar-fill{color:var(--red);background:var(--red);}
+.bri-low .bri-status-badge{background:rgba(227,73,72,.15);color:var(--red);}
+.bri-neutral .bri-value,.bri-neutral .bri-bar-fill{color:var(--text-secondary);background:var(--text-secondary);}
+.bri-neutral .bri-status-badge{background:rgba(155,154,147,.15);color:var(--text-secondary);}
+.bri-elevated .bri-value,.bri-elevated .bri-bar-fill{color:var(--amber);background:var(--amber);}
+.bri-elevated .bri-status-badge{background:rgba(237,161,0,.15);color:var(--amber);}
+.bri-high .bri-value,.bri-high .bri-bar-fill{color:var(--green);background:var(--green);}
+.bri-high .bri-status-badge{background:rgba(27,175,122,.15);color:var(--green);}
+
+.interp-card{margin:0 18px 18px;padding:14px 18px;border-radius:10px;border:0.5px solid var(--border);font-size:13px;line-height:1.6;}
+.interp-card .interp-text{font-weight:600;margin-bottom:4px;}
+.interp-card .interp-detail{color:var(--text-secondary);font-size:12px;}
+.interp-card .interp-view{margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border);font-size:12px;color:var(--text-secondary);}
+.interp-green{background:rgba(27,175,122,.08);border-color:rgba(27,175,122,.25);}
+.interp-yellow{background:rgba(237,161,0,.08);border-color:rgba(237,161,0,.25);}
+.interp-amber{background:rgba(237,138,0,.08);border-color:rgba(237,138,0,.3);}
+
+/* ── generic info card (Verdict / Training Summary / Evidence Summary) ───── */
+.info-card{margin:0 18px 18px;padding:16px 18px;border-radius:10px;border:0.5px solid var(--border);background:var(--surface);}
+.info-card h3{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:12px;}
+.info-row{display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:0.5px solid var(--border);font-size:13px;}
+.info-row:last-child{border-bottom:none;}
+.info-row .ir-label{color:var(--text-secondary);}
+.info-row .ir-val{font-family:var(--mono);font-weight:600;font-variant-numeric:tabular-nums;}
+.verdict-text{font-size:13px;line-height:1.6;color:var(--text-secondary);margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border);}
+
+/* stat-grid: 2-col on mobile by default, 4-col on wider screens (mobile-first) */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.stat-cell{text-align:left;}
+.stat-cell .sc-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;}
+.stat-cell .sc-val{font-size:18px;font-weight:600;font-variant-numeric:tabular-nums;}
+.stat-cell .sc-sub{font-size:11px;color:var(--text-muted);}
+@media(min-width:560px){ .stat-grid{grid-template-columns:repeat(4,1fr);} }
+
+/* ── evidence list (Positive / Negative) — single column on mobile ───────── */
+.evidence-cols{display:grid;grid-template-columns:1fr;gap:14px;padding:0 18px 18px;}
+@media(min-width:640px){ .evidence-cols{grid-template-columns:1fr 1fr;} }
+.evidence-group{}
+.evidence-group h3{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px;}
+.ev-item{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:0.5px solid var(--border);font-size:12px;}
+.ev-item:last-child{border-bottom:none;}
+.ev-item .ev-name{color:var(--text-secondary);flex:1;min-width:0;}
+.ev-item .ev-mid{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;}
+.ev-item .ev-label{font-size:10px;font-weight:600;padding:1px 6px;border-radius:3px;white-space:nowrap;}
+.ev-item .ev-lr{font-family:var(--mono);font-weight:600;font-size:11px;}
+.lr-pos{color:var(--green);}
+.lr-neg{color:var(--red);}
+.ev-label.strong-pos{background:rgba(27,175,122,.18);color:var(--green);}
+.ev-label.pos{background:rgba(27,175,122,.10);color:var(--green);}
+.ev-label.strong-neg{background:rgba(227,73,72,.18);color:var(--red);}
+.ev-label.neg{background:rgba(227,73,72,.10);color:var(--red);}
+
+/* ── developer section (collapsed by default) ─────────────────────────────*/
+.dev-toggle{font-size:11px;color:var(--text-muted);cursor:pointer;padding:8px 18px 16px;text-decoration:underline;text-decoration-style:dotted;}
+.dev-toggle:hover{color:var(--text-secondary);}
+.dev-panel{margin:0 18px 18px;padding:12px 16px;border-radius:8px;border:0.5px dashed var(--border-strong);background:var(--surface3);font-size:11px;color:var(--text-muted);font-family:var(--mono);}
+.dev-panel div{padding:2px 0;}
+
+
+/* evidence library table */
+.lib-tabs{display:flex;gap:2px;background:var(--surface2);border:0.5px solid var(--border);border-radius:6px;padding:3px;}
+.ltab{font-size:12px;padding:4px 12px;border-radius:4px;cursor:pointer;color:var(--text-secondary);transition:all .12s;border:none;background:none;}
+.ltab.active{background:var(--accent);color:#fff;}
+.lib-wrap{background:var(--surface);border:0.5px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px;overflow-x:auto;}
+.lib-cols{display:grid;grid-template-columns:1fr 90px 90px 90px 70px;gap:8px;padding:8px 16px;font-size:12px;align-items:center;min-width:560px;}
+.lib-hdr{background:var(--surface2);border-bottom:0.5px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);}
+.lib-row{border-bottom:0.5px solid var(--border);}
+.lib-row:last-child{border-bottom:none;}
+.lib-row:hover{background:var(--surface2);}
+
+/* blast/miss list */
+.cyc-table-wrap{background:var(--surface);border:0.5px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px;max-height:360px;overflow-y:auto;}
+.cyc-cols{display:grid;grid-template-columns:40px 90px 84px 70px 70px 70px;gap:8px;padding:7px 16px;font-size:12px;align-items:center;}
+.cyc-hdr{background:var(--surface2);border-bottom:0.5px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);position:sticky;top:0;}
+.cyc-row{border-bottom:0.5px solid var(--border);}
+.cyc-row:last-child{border-bottom:none;}
+.cyc-row:hover{background:var(--surface2);}
+
+@media(max-width:700px){
+  .controls{grid-template-columns:1fr 1fr;}
+  .evidence-cols{grid-template-columns:1fr;}
+  .lib-cols,.cyc-cols{grid-template-columns:1fr 64px 64px;}
+  .lib-cols>:nth-child(n+4),.cyc-cols>:nth-child(n+4){display:none;}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div>
+      <div class="topbar-title">
+        <span class="engine-badge" id="engineBadge">Engine B v6</span>
+        <h1>Evidence Engine</h1>
+      </div>
+      <p class="subtitle">Historical evidence learning · Likelihood ratios · Blast Readiness Index</p>
+    </div>
+    <button class="csv-btn" id="aboutBtn" onclick="toggleAbout()">ⓘ About / Version</button>
+  </div>
+
+  <div class="wash-report" id="aboutPanel" style="display:none"></div>
+
+  <!-- data source (auto-run: hidden by default, see #autoRunStyle) -->
+  <div class="data-source-panel" id="dsPanel">
+    <div class="ds-tabs">
+      <button class="ds-tab active" data-src="url">URL</button>
+      <button class="ds-tab" data-src="file">File upload</button>
+    </div>
+    <div class="ds-body" id="dsSrcUrl">
+      <div class="url-row">
+        <input type="text" id="csvUrl"
+          placeholder="Paste Google Sheets CSV URL or any public CSV link…"
+          value="https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0WRRoaKlcjrQ6xthFpq5r5n8XQpUSeUg7rsy0zXBUdx46HBacISyimAsIRbGPRYpsvpkUGwLCSJQm/pub?output=csv"
+          spellcheck="false">
+        <button class="btn-fetch" id="fetchBtn">Fetch</button>
+      </div>
+      <p class="ds-hint">Google Sheets → File → Share → Publish to web → CSV</p>
+    </div>
+    <div class="ds-body" id="dsSrcFile" style="display:none">
+      <div class="file-zone" id="fileZone">
+        <input type="file" id="csvInput" accept=".csv"/>
+        <div style="font-size:22px;margin-bottom:6px">📁</div>
+        <p><strong>Drop OHLC CSV here</strong> or click to browse</p>
+        <p style="margin-top:3px;font-size:12px">Date, Open, High, Low, Close</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- wash report -->
+  <div class="wash-report" id="washReport" style="display:none"></div>
+
+  <!-- controls -->
+  <div class="controls" id="controlsPanel">
+    <div class="field">
+      <label>ATR blast threshold (× ATR14)</label>
+      <input type="number" id="blastThresh" value="2" min="1" max="5" step="0.1">
+    </div>
+    <div class="field">
+      <label>Lookback window (days)</label>
+      <input type="number" id="lookback" value="9" min="9" max="9" step="1" disabled>
+    </div>
+    <div class="field">
+      <label>Min sample size (Blast+Miss)</label>
+      <input type="number" id="minSamples" value="5" min="1" max="50" step="1">
+    </div>
+    <button class="btn-run" id="runBtn" disabled>Run Engine B</button>
+  </div>
+
+  <style id="autoRunStyle">
+    #dsPanel, #washReport, #controlsPanel { display:none !important; }
+  </style>
+  <button class="csv-btn" id="showSetupBtn" onclick="toggleSetupPanels()" style="margin-bottom:16px;">⚙ Show Setup</button>
+
+
+  <div class="error-bar" id="errorBar"></div>
+  <div class="status-bar" id="statusBar">
+    <div class="spinner"></div>
+    <span id="statusText">Processing…</span>
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+  </div>
+
+  <!-- results -->
+  <div class="results" id="results">
+
+    <!-- summary cards -->
+    <div class="summary-grid" id="summaryGrid"></div>
+
+    <!-- today / BRI live panel -->
+    <div class="sh"><h2>Today — Blast Readiness Index</h2></div>
+    <div class="today-card" id="todayCard"></div>
+
+    <!-- blast/miss cycle list (collapsible, default collapsed) -->
+    <div class="sh" style="cursor:pointer;" id="cycToggleBar" onclick="toggleCycleList()">
+      <h2>Cycle list — Blast &amp; Miss <span id="cycToggleIcon" style="font-size:10px;margin-left:6px;color:var(--accent);">▶ expand</span></h2>
+      <button class="csv-btn" id="exportBtn" onclick="event.stopPropagation();exportCSV()">Export CSV</button>
+    </div>
+    <div class="cyc-table-wrap" id="cycTable" style="display:none;"></div>
+
+    <!-- evidence library -->
+    <div class="sh" style="margin-top:24px;cursor:pointer;" onclick="toggleEvidenceLib()">
+      <h2>Evidence Library <span id="libToggleIcon" style="font-size:10px;margin-left:6px;color:var(--accent);">▶ expand</span></h2>
+    </div>
+    <div id="libPanel" style="display:none">
+      <div class="lib-tabs" id="libRegimeTabs" style="margin-bottom:10px;">
+        <button class="ltab active" data-regime="HighSptR">HighSptR</button>
+        <button class="ltab" data-regime="LowSptR">LowSptR</button>
+      </div>
+      <div class="lib-tabs" id="libTypeTabs" style="margin-bottom:10px;">
+        <button class="ltab active" data-type="singleDay">Single-Day</button>
+        <button class="ltab" data-type="streak">Streaks</button>
+        <button class="ltab" data-type="transition">Transitions</button>
+      </div>
+      <div class="lib-wrap" id="libTable"></div>
+    </div>
+
+    <div class="sh" style="margin-top:24px;">
+      <h2>BRI Calibration</h2>
+      <button class="csv-btn" id="calibBtn" onclick="runCalibrationUI()">Run Calibration</button>
+    </div>
+    <div class="lib-wrap" id="calibTable"></div>
+
+    <div class="sh" style="margin-top:24px;">
+      <h2>Historical Daily Replay</h2>
+    </div>
+    <div class="info-card">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+        <div class="field" style="flex:1;min-width:140px;">
+          <label>Replay Date (or index)</label>
+          <input type="text" id="replayDate" placeholder="e.g. 2023-04-12">
+        </div>
+        <button class="btn-run" id="replayBtn" onclick="runReplayUI()">Replay</button>
+      </div>
+      <div id="replayResult" style="margin-top:14px;"></div>
+    </div>
+
+  </div>
+
+  <div class="empty-state" id="emptyState">
+    <p>Load an OHLC CSV to begin</p>
+  </div>
+
+</div>
+<script>
+'use strict'; // required for Object.freeze() on the Evidence Library to actually
+              // throw on accidental mutation, instead of silently no-op'ing.
+// =============================================================================
+// ENGINE B v6 — EVIDENCE ENGINE
+// Historical Evidence Learning · Likelihood Ratios · Blast Readiness Index
+// =============================================================================
+
+const $=id=>document.getElementById(id);
+const LOOKBACK = 9;          // LOCKED — 9-day lookback window
+const FORWARD_WINDOW = 10;   // LOCKED — blast detection forward window
+const WARMUP_ROWS = 100;     // LOCKED — first 100 rows are warm-up
+const REGIME_CONFIRM_STREAK = 3; // regime flips only after N consecutive raw readings
+
+// ── version metadata (LOCKED — bump deliberately, never silently) ────────────
+const VERSION = {
+  engine: "Engine B v6.1",
+  evidenceLibrary: "Evidence Library v1.0",
+  blastLogic: "10-Day Forward Window (non-overlapping Blast + Miss)",
+  briMethod: "Naive-Bayes Log-Likelihood Ratio (Laplace-smoothed)",
+  architecture: "Architecture v6 — Sense Engine + Evidence Engine + BRI",
+};
+
+// =============================================================================
+// FOUNDATION MODULES (LOCKED — unchanged from prior versions)
+// =============================================================================
+
+function atr14(rows,i){
+  const slice=rows.slice(Math.max(0,i-13),i+1);
+  let s=0,c=0;
+  for(let j=1;j<slice.length;j++){s+=slice[j].TR;c++;}
+  return c===0?(rows[i].high-rows[i].low||1):(s/c||1);
+}
+
+// ── raw regime (unchanged formula) ────────────────────────────────────────────
+function rawRegimeAt(rows,i){
+  if(i<50)return"HighSptR";
+  let hi=-Infinity,lo=Infinity;
+  for(let j=i-50;j<i;j++){hi=Math.max(hi,rows[j].high);lo=Math.min(lo,rows[j].low);}
+  return rows[i].close>(hi+lo)/2?"HighSptR":"LowSptR";
+}
+
+// ── confirmed-regime series: single-pass, flips only after
+//    REGIME_CONFIRM_STREAK consecutive raw readings of a new regime ──────────
+function buildConfirmedRegimeSeries(rows){
+  const n=rows.length;
+  const confirmed=new Array(n);
+  const debug=new Array(n); // {raw, streakLabel, streakCount, changed}
+  let curConfirmed=null, streakLabel=null, streakCount=0;
+  for(let i=0;i<n;i++){
+    const raw=rawRegimeAt(rows,i);
+    let changed=false;
+    if(curConfirmed===null){
+      curConfirmed=raw; streakLabel=raw; streakCount=1;
+    } else if(raw===curConfirmed){
+      streakLabel=raw; streakCount=1;
+    } else {
+      if(raw===streakLabel){ streakCount++; } else { streakLabel=raw; streakCount=1; }
+      if(streakCount>=REGIME_CONFIRM_STREAK){
+        curConfirmed=raw; changed=true; streakCount=0; streakLabel=null;
+      }
+    }
+    confirmed[i]=curConfirmed;
+    debug[i]={raw, confirmed:curConfirmed, streakLabel, streakCount, changed};
+  }
+  return {confirmed, debug};
+}
+
+const _confirmedRegimeCache=new WeakMap();
+function _getRegimeSeries(rows){
+  let s=_confirmedRegimeCache.get(rows);
+  if(!s){ s=buildConfirmedRegimeSeries(rows); _confirmedRegimeCache.set(rows,s); }
+  return s;
+}
+
+// getRegime — same (rows,i) signature every existing call site already uses.
+// Now returns the CONFIRMED regime (raw regime filtered through a
+// REGIME_CONFIRM_STREAK-bar confirmation), computed once per rows array.
+function getRegime(rows,i){
+  return _getRegimeSeries(rows).confirmed[i];
+}
+
+// debug accessor — used only by the Developer panel, never by scoring math
+function getRegimeDebug(rows,i){
+  return _getRegimeSeries(rows).debug[i];
+}
+
+function cleanDateStr(s){
+  if(!s)return null;
+  s=s.replace(/['"]/g,"").trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
+  let m=s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if(m){const[,d,mo,y]=m;return y+"-"+mo.padStart(2,"0")+"-"+d.padStart(2,"0");}
+  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(m){const[,mo,d,y]=m;return y+"-"+mo.padStart(2,"0")+"-"+d.padStart(2,"0");}
+  const dt=new Date(s);
+  if(!isNaN(dt))return dt.toISOString().slice(0,10);
+  return null;
+}
+function parseCleanNum(s){
+  if(s===null||s===undefined)return null;
+  const n=parseFloat(String(s).replace(/[, ]/g,""));
+  return isNaN(n)||n<=0?null:n;
+}
+
+function washCSV(rawText){
+  const lines=rawText.trim().split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<2)throw new Error("CSV too short");
+  const rawHeader=lines[0].split(",");
+  const hdr=rawHeader.map(h=>String(h).replace(/^\ufeff/g,"").trim().toLowerCase());
+  const fi={
+    date:hdr.findIndex(h=>h==="date"),
+    open:hdr.findIndex(h=>h==="open"),
+    high:hdr.findIndex(h=>h==="high"),
+    low: hdr.findIndex(h=>h==="low"),
+    close:hdr.findIndex(h=>h==="close")
+  };
+  if(Object.values(fi).includes(-1))
+    throw new Error("Cannot find columns. Need: Date, Open, High, Low, Close. Found: "+hdr.join(", "));
+
+  let nNoDate=0,nBadHL=0,nDupe=0,nSpike=0;
+  const seenDates=new Set();
+  let prevClose=null,prevOHLC=null;
+  let validRows=[];
+
+  for(let i=1;i<lines.length;i++){
+    const p=lines[i].split(",");
+    const dk=cleanDateStr(p[fi.date]?.trim()||"");
+    if(!dk){nNoDate++;continue;}
+    const o=parseCleanNum(p[fi.open]),h=parseCleanNum(p[fi.high]),
+          l=parseCleanNum(p[fi.low]),c=parseCleanNum(p[fi.close]);
+    if(!o||!h||!l||!c||h<l||c>h||c<l){nBadHL++;continue;}
+    if(seenDates.has(dk)){nDupe++;continue;}
+    seenDates.add(dk);
+    const ohlcKey=`${o}_${h}_${l}_${c}`;
+    if(prevOHLC===ohlcKey){nDupe++;continue;}
+    prevOHLC=ohlcKey;
+    if(prevClose!==null&&Math.abs(c-prevClose)/prevClose*100>20){nSpike++;prevClose=c;continue;}
+    prevClose=c;
+    validRows.push({date:dk,open:o,high:h,low:l,close:c});
+  }
+
+  const cutoff=new Date();
+  cutoff.setFullYear(cutoff.getFullYear()-3);
+  const cutoffStr=cutoff.toISOString().slice(0,10);
+  const beforeLB=validRows.length;
+  validRows=validRows.filter(r=>r.date>=cutoffStr);
+  const nLookback=beforeLB-validRows.length;
+
+  validRows.sort((a,b)=>new Date(a.date)-new Date(b.date));
+
+  for(let i=0;i<validRows.length;i++){
+    const curr=validRows[i],prev=i>0?validRows[i-1]:null;
+    curr.TR=prev
+      ?Math.max(curr.high-curr.low,Math.abs(curr.high-prev.close),Math.abs(curr.low-prev.close))
+      :curr.high-curr.low;
+  }
+
+  if(validRows.length<115)
+    throw new Error("After washing, only "+validRows.length+" rows remain (need ≥ 115).");
+
+  const report={
+    raw:lines.length-1,clean:validRows.length,
+    dropped:{parse:nNoDate,hl:nBadHL,dupe:nDupe,spike:nSpike,lookback:nLookback},
+    dateFirst:validRows[0].date,dateLast:validRows[validRows.length-1].date
+  };
+  return{rows:validRows,report};
+}
+
+function showWashReport(report){
+  const el=$("washReport");el.style.display="block";
+  const dropped=Object.values(report.dropped).reduce((a,b)=>a+b,0);
+  const ok=dropped===0;
+  el.innerHTML=
+    '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:10px;">Data wash</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:8px;">'+
+    wc("Raw rows",report.raw)+wc("Clean rows",report.clean,ok?"ok":"")+
+    wc("Dropped",dropped,ok?"ok":"warn")+
+    wc("Bad OHLC",(report.dropped.parse||0)+(report.dropped.hl||0))+
+    wc("Duplicates",report.dropped.dupe||0)+wc("Spikes >20%",report.dropped.spike||0)+
+    wc("Outside 3yr",report.dropped.lookback||0)+
+    wc("Date range",'<span style="font-size:10px">'+report.dateFirst+' → '+report.dateLast+'</span>')+
+    '</div>';
+}
+function wc(label,value,cls=""){
+  return`<div class="wash-cell"><div class="wl">${label}</div><div class="wv ${cls}">${value}</div></div>`;
+}
+
+// =============================================================================
+// DATA LAYER — Historical Cycle Generation (LOCKED rules)
+// =============================================================================
+//
+// Blast: anchor row, scan forward up to FORWARD_WINDOW days. If
+//        max(high-anchorClose, anchorClose-low) > ATR14*thresh on some day,
+//        that day is the Blast row. Next anchor JUMPS to the blast row.
+// Miss:  if no blast occurs within FORWARD_WINDOW days, classify anchor as
+//        MISS. Next anchor = next chronological row (advance +1).
+//        Miss windows may overlap.
+//
+// Returns array of cycle objects: { idx, date, regime, type:'Blast'|'Miss',
+//                                    moveATR (Blast only) }
+// =============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
+// ANCHOR INDEXING CONVENTION (read this before touching the loop below)
+//
+//   p always means "anchor row index + 1". The anchor row itself is
+//   rows[p-1], and its close price (ac) and ATR14 are both read from that
+//   row. This offset exists only so the forward-scan loop can index
+//   cleanly as rows[p+di] for di = 0 .. FORWARD_WINDOW-1, which covers
+//   exactly the 10 trading days AFTER the anchor (anchor+1 .. anchor+10).
+//
+//   On BLAST: the next anchor becomes the blast row itself (per spec).
+//     blastIdx is the absolute row index of the blast.
+//     next anchor index = blastIdx  =>  next p = blastIdx + 1.
+//
+//   On MISS: the entire 10-day window is "consumed" (per spec) — the next
+//     anchor becomes the LAST day of that window, i.e. anchor_index + 10.
+//     anchor_index = p - 1, so next anchor index = (p-1) + 10 = p + 9.
+//     Converting back to p-convention: next p = (p+9) + 1 = p + 10
+//                                              = p + FORWARD_WINDOW.
+//     This makes Miss cycles non-overlapping, symmetric with Blast jumps.
+//
+// FIELD SEPARATION (v6.2.1 — LOCKED, fixes look-ahead bug)
+//   "Anchor" and "Blast confirmation" are NEVER the same field. A Blast
+//   row can become the NEXT cycle's anchor — if that next cycle Misses,
+//   the same calendar date legitimately appears once as a Blast's
+//   blastDate and once as a different cycle's anchorDate. That is correct
+//   behavior, not a duplicate — which is exactly why they need separate
+//   fields instead of one overloaded `date`.
+//
+//   Every cycle now carries:
+//     anchorIdx,  anchorDate   — ALWAYS present, the cycle's starting point
+//     regime                  — ALWAYS evaluated AT THE ANCHOR (see below)
+//     type                    — 'Blast' | 'Miss'
+//     blastIdx,   blastDate   — present only for Blast, else null
+//     daysToBlast             — 1..FORWARD_WINDOW for Blast, else null
+//     direction               — 'Up' | 'Down' for Blast, else null
+//     moveATR                 — Blast: ATR move AT the blast.
+//                               Miss:  the MAXIMUM ATR move reached anywhere
+//                                      in the 10-day window (explains the
+//                                      near-miss magnitude instead of null).
+//
+//   CRITICAL: regime is evaluated with getRegime(rows, anchorIdx) for BOTH
+//   Blast and Miss — never blastIdx. Using the blast row's regime would
+//   classify the cycle's evidence using information from inside the
+//   forward evaluation window, which is the same look-ahead violation as
+//   the lookback-window bug this version fixes. Anchor regime keeps Blast
+//   and Miss perfectly symmetrical: both are evaluated at the same moment
+//   in time — before anything in the cycle has happened yet.
+// ─────────────────────────────────────────────────────────────────────────────
+function generateCycles(rows, thresh){
+  const cycles=[];
+  let p = WARMUP_ROWS;
+  while(p < rows.length - FORWARD_WINDOW){
+    // LOCKED — exact original blast-detection ATR14: 14-bar simple mean of TR
+    // ending at row p-1 (the anchor row), identical to the v5.1 formula.
+    // NOTE: this intentionally differs from the general atr14() helper used
+    // by the Sense Engine — that helper is a v6-native addition with no
+    // prior-version precedent to preserve.
+    const a14 = rows.slice(p-14, p).reduce((s,d)=>s+d.TR, 0) / 14;
+    const anchorIdx = p - 1;
+    const ac  = rows[anchorIdx].close; // anchor row's close
+    const anchorRegime = getRegime(rows, anchorIdx); // LOCKED reference point — never blastIdx
+
+    let blastDay = -1;
+    let maxMoveATR = 0; // tracks the largest ATR-normalized move seen anywhere
+                         // in the forward window, even if no blast triggers
+    // Forward scan covers rows[p] .. rows[p+FORWARD_WINDOW-1], i.e. the
+    // 10 trading days strictly AFTER the anchor. This cap is an intentional
+    // v6 architectural rule (see locked clarification), not a legacy carry-over.
+    for(let di=0; di<FORWARD_WINDOW && p+di<rows.length; di++){
+      const fr = rows[p+di];
+      const mm = Math.max(Math.abs(fr.high-ac), Math.abs(ac-fr.low));
+      const mmATR = a14>0 ? mm/a14 : 0;
+      if(mmATR > maxMoveATR) maxMoveATR = mmATR;
+      if(a14>0 && mmATR >= thresh){ blastDay = di; break; }
+    }
+
+    if(blastDay >= 0){
+      const blastIdx = p + blastDay;
+      const blastBar = rows[blastIdx];
+      const moveATR = Math.max(Math.abs(blastBar.high-ac), Math.abs(ac-blastBar.low)) / a14;
+      const direction = blastBar.close >= ac ? 'Up' : 'Down';
+      cycles.push({
+        anchorIdx, anchorDate: rows[anchorIdx].date,
+        anchorClose: ac, anchorATR14: a14,
+        regime: anchorRegime,
+        type: 'Blast',
+        blastIdx, blastDate: blastBar.date,
+        daysToBlast: blastDay + 1, // 1-indexed: blastDay=0 means "1 day to blast"
+        direction, moveATR,
+      });
+      // Next anchor = the blast row itself => next p = blastIdx + 1.
+      p = blastIdx + 1;
+    } else {
+      cycles.push({
+        anchorIdx, anchorDate: rows[anchorIdx].date,
+        anchorClose: ac, anchorATR14: a14,
+        regime: anchorRegime,
+        type: 'Miss',
+        blastIdx: null, blastDate: null,
+        daysToBlast: null, direction: null,
+        moveATR: maxMoveATR, // max ATR move reached during the window — never null
+      });
+      // Entire 10-day window consumed (LOCKED) => next anchor = Day 10 after
+      // this anchor => next p = p + FORWARD_WINDOW. Produces non-overlapping
+      // Miss cycles, symmetric with the Blast jump rule above.
+      p += FORWARD_WINDOW;
+    }
+  }
+  return cycles;
+}
+
+
+// =============================================================================
+// SENSE ENGINE — daily Quietness & Direction labeling (LOCKED formulas)
+// =============================================================================
+//   Quietness = TR(day) / ATR14(day)
+//   Direction = (Close - Open) / TR(day)
+// Labels assigned via regime-specific p33/p66 thresholds, computed once
+// across all rows (excluding warm-up) per regime.
+// =============================================================================
+function dailySenseRaw(rows, i){
+  if(i < 1) return null;
+  const a = atr14(rows, i);
+  const tr = rows[i].TR;
+  const quietRaw = tr / a;
+  const dirRaw   = tr !== 0 ? (rows[i].close - rows[i].open) / tr : 0;
+  return { quietRaw, dirRaw };
+}
+
+function percentile(arr, p){
+  if(!arr.length) return 0;
+  const sorted = [...arr].sort((a,b)=>a-b);
+  const idx = (p/100)*(sorted.length-1);
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  return sorted[lo]+(sorted[hi]-sorted[lo])*(idx-lo);
+}
+
+// Compute regime-specific thresholds for Quietness and Direction
+function computeSenseThresholds(rows){
+  const byRegime = { HighSptR: { q:[], d:[] }, LowSptR: { q:[], d:[] } };
+  for(let i = WARMUP_ROWS; i < rows.length; i++){
+    const raw = dailySenseRaw(rows, i);
+    if(!raw) continue;
+    const reg = getRegime(rows, i);
+    byRegime[reg].q.push(raw.quietRaw);
+    byRegime[reg].d.push(raw.dirRaw);
+  }
+  const thr = {};
+  for(const reg of ["HighSptR","LowSptR"]){
+    thr[reg] = {
+      q_p33: percentile(byRegime[reg].q, 33), q_p66: percentile(byRegime[reg].q, 66),
+      d_p33: percentile(byRegime[reg].d, 33), d_p66: percentile(byRegime[reg].d, 66),
+    };
+  }
+  return thr;
+}
+
+// Label a single day using precomputed thresholds
+function labelDay(rows, i, senseThr){
+  const raw = dailySenseRaw(rows, i);
+  if(!raw) return null;
+  const reg = getRegime(rows, i);
+  const t = senseThr[reg];
+  const qLabel = raw.quietRaw <= t.q_p33 ? 'Quiet' : raw.quietRaw >= t.q_p66 ? 'Loud' : 'Mid';
+  const dLabel = raw.dirRaw  >= t.d_p66 ? 'Up'    : raw.dirRaw  <= t.d_p33 ? 'Down' : 'Range';
+  return { idx:i, quietRaw:raw.quietRaw, dirRaw:raw.dirRaw, qLabel, dLabel, regime: reg };
+}
+
+// Build the 9-day lookback label sequence ending the day before anchorIdx
+// (i.e. Day -9 .. Day -1 relative to anchor). Returns null entries where
+// insufficient history exists.
+function lookbackLabels(rows, anchorIdx, senseThr){
+  const out = [];
+  for(let d = LOOKBACK; d >= 1; d--){
+    const idx = anchorIdx - d;
+    out.push(idx >= 1 ? labelDay(rows, idx, senseThr) : null);
+  }
+  return out; // index 0 = Day -9 ... index 8 = Day -1
+}
+
+
+// =============================================================================
+// EVIDENCE ENGINE
+// =============================================================================
+// Evidence types (all tracked independently per regime):
+//   1. Single-Day   — "Day -N Quiet", "Day -N Up", etc. (Quietness & Direction
+//                      tracked as separate evidence objects, never combined)
+//   2. Streak       — same-label runs of length 2 or 3, separately for
+//                      Quietness streaks and Direction streaks, at any
+//                      starting position within the 9-day lookback
+//   3. Transition   — Day(t-1)->Day(t) label change, separately for
+//                      Quietness transitions and Direction transitions
+//
+// Each evidence object accumulates:
+//   blastCount, missCount  — raw occurrence counts across all cycles
+//   LR (Likelihood Ratio)  — see computeLR()
+// =============================================================================
+
+// ── evidence key builders ─────────────────────────────────────────────────────
+function sdKey(dayOffset, label){ return `SD:Day-${dayOffset}:${label}`; }
+function streakKey(startOffset, len, label, pillar){ return `STK:${pillar}:Day-${startOffset}..-${startOffset-len+1}:${label}x${len}`; }
+function transKey(dayOffset, fromLabel, toLabel, pillar){ return `TRN:${pillar}:Day-${dayOffset+1}->Day-${dayOffset}:${fromLabel}->${toLabel}`; }
+
+// ── extract all evidence object keys present in a 9-day label sequence ───────
+// labels: array of 9 entries (Day -9..-1), each {qLabel,dLabel} or null
+function extractEvidenceKeys(labels){
+  const keys = new Set();
+
+  // 1. Single-Day — dayOffset = 9..1 (index 0 = Day -9 ... index 8 = Day -1)
+  labels.forEach((lb, idx) => {
+    if(!lb) return;
+    const dayOffset = LOOKBACK - idx; // idx0 -> 9, idx8 -> 1
+    keys.add(sdKey(dayOffset, lb.qLabel));
+    keys.add(sdKey(dayOffset, lb.dLabel));
+  });
+
+  // 2. Streaks — lengths 2 and 3, Quietness and Direction tracked separately
+  for(const len of [2,3]){
+    for(let idx = 0; idx + len <= labels.length; idx++){
+      const slice = labels.slice(idx, idx+len);
+      if(slice.some(s => !s)) continue;
+      const startOffset = LOOKBACK - idx; // offset of the FIRST (oldest) day in streak
+      // Quietness streak
+      if(slice.every(s => s.qLabel === slice[0].qLabel)){
+        keys.add(streakKey(startOffset, len, slice[0].qLabel, 'Q'));
+      }
+      // Direction streak
+      if(slice.every(s => s.dLabel === slice[0].dLabel)){
+        keys.add(streakKey(startOffset, len, slice[0].dLabel, 'D'));
+      }
+    }
+  }
+
+  // 3. Transitions — Day(t-1)->Day(t) for t = idx 1..8
+  for(let idx = 1; idx < labels.length; idx++){
+    const prev = labels[idx-1], curr = labels[idx];
+    if(!prev || !curr) continue;
+    const dayOffset = LOOKBACK - idx; // offset of the LATER day (Day -dayOffset)
+    if(prev.qLabel !== curr.qLabel) keys.add(transKey(dayOffset, prev.qLabel, curr.qLabel, 'Q'));
+    if(prev.dLabel !== curr.dLabel) keys.add(transKey(dayOffset, prev.dLabel, curr.dLabel, 'D'));
+  }
+
+  return keys;
+}
+
+// ── build the full Evidence Library from all cycles, per regime ──────────────
+// Returns: { HighSptR: Map<key,{blastCount,missCount}>, LowSptR: Map<...> }
+function buildEvidenceLibrary(cycles, senseThr, rows){
+  const library = { HighSptR: new Map(), LowSptR: new Map() };
+
+  function bump(map, key, isBlast){
+    if(!map.has(key)) map.set(key, { blastCount:0, missCount:0 });
+    const e = map.get(key);
+    if(isBlast) e.blastCount++; else e.missCount++;
+  }
+
+  // LOCKED (v6.2.1 fix): lookback is ALWAYS anchored at anchorIdx, for both
+  // Blast and Miss cycles. Using blastIdx here (the old bug) would let the
+  // Evidence Engine see part of the forward evaluation window — exactly the
+  // look-ahead bias the architecture forbids. Blast and Miss are symmetric:
+  // both are evaluated relative to the same starting moment, the anchor.
+  for(const c of cycles){
+    if(c.anchorIdx < LOOKBACK + 1) continue; // insufficient history
+    const labels = lookbackLabels(rows, c.anchorIdx, senseThr);
+    const keys = extractEvidenceKeys(labels);
+    const map = library[c.regime];
+    const isBlast = c.type === 'Blast';
+    keys.forEach(k => bump(map, k, isBlast));
+  }
+
+  return library;
+}
+
+// ── Likelihood Ratio with Laplace smoothing ───────────────────────────────────
+// LR = P(evidence|Blast) / P(evidence|Miss)
+//    = ((blastCount+1)/(totalBlast+1)) / ((missCount+1)/(totalMiss+1))
+function computeLR(blastCount, missCount, totalBlast, totalMiss){
+  const pBlast = (blastCount + 1) / (totalBlast + 1);
+  const pMiss  = (missCount + 1) / (totalMiss + 1);
+  return pBlast / pMiss;
+}
+
+// ── finalize library: attach LR, filter by min sample size ───────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// FREEZE CONTRACT (LOCKED)
+//   Historical learning produces this library exactly once, after which it
+//   must be treated as read-only. Live Signal scoring (computeBRI) is only
+//   ever permitted to READ from it — never to increment counts, recompute
+//   LR, or otherwise mutate it. Object.freeze enforces this at runtime: any
+//   accidental write attempt throws under 'use strict' rather than silently
+//   corrupting learned statistics.
+// ─────────────────────────────────────────────────────────────────────────────
+function finalizeLibrary(library, cycles, minSamples){
+  const totals = { HighSptR: {blast:0, miss:0}, LowSptR: {blast:0, miss:0} };
+  cycles.forEach(c => {
+    if(c.type === 'Blast') totals[c.regime].blast++;
+    else totals[c.regime].miss++;
+  });
+
+  const finalized = { HighSptR: [], LowSptR: [] };
+  for(const regime of ["HighSptR","LowSptR"]){
+    const tot = totals[regime];
+    library[regime].forEach((counts, key) => {
+      const sample = counts.blastCount + counts.missCount;
+      if(sample < minSamples) return; // excluded — insufficient evidence
+      const lr = computeLR(counts.blastCount, counts.missCount, tot.blast, tot.miss);
+      finalized[regime].push(Object.freeze({
+        key, blastCount: counts.blastCount, missCount: counts.missCount,
+        sample, lr, logLR: Math.log(lr)
+      }));
+    });
+    finalized[regime].sort((a,b) => b.lr - a.lr);
+    Object.freeze(finalized[regime]); // freeze array — no push/sort/splice after this point
+  }
+  Object.freeze(finalized);
+  Object.freeze(totals.HighSptR); Object.freeze(totals.LowSptR); Object.freeze(totals);
+  return { finalized, totals };
+}
+
+// ── parse evidence key into type/pillar for grouping in UI ───────────────────
+function parseEvidenceKey(key){
+  if(key.startsWith('SD:'))  return { type:'singleDay', label: key.slice(3) };
+  if(key.startsWith('STK:')) return { type:'streak',    label: key.slice(4) };
+  if(key.startsWith('TRN:')) return { type:'transition',label: key.slice(4) };
+  return { type:'unknown', label:key };
+}
+
+
+// =============================================================================
+// BLAST READINESS INDEX (BRI) — Naive-Bayes log-likelihood aggregation
+// =============================================================================
+// For today's live 9-day label sequence, extract active evidence keys,
+// look up each in the finalized library (current regime), sum log(LR)
+// across all active+qualified evidence objects, then map the sum to 0-100
+// via a logistic squashing function (sigmoid), since raw log-LR sums are
+// unbounded.
+// =============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
+// READ-ONLY CONTRACT (LOCKED)
+//   computeBRI only ever READS from finalizedRegimeList (frozen by
+//   finalizeLibrary). It must never increment counts, alter LR/logLR, or
+//   push/remove entries. Historical learning and Live Signal evaluation
+//   are architecturally separate phases — this function is the boundary.
+// ─────────────────────────────────────────────────────────────────────────────
+// ── calibration: replay every historical cycle through BRI, bin results ──────
+// Chunked + resumable: state saved on R.calib so a re-click continues instead
+// of restarting if interrupted.
+function runCalibration(onProgress){
+  return new Promise((resolve,reject)=>{
+    if(!R){reject(new Error("Run the engine first"));return;}
+    if(!R.calib) R.calib = { i:0, bins:Array.from({length:10},()=>({total:0,blast:0})) };
+    const {rows,cycles,senseThr,finalized}=R;
+    const calib=R.calib;
+    const CHUNK=200;
+
+    function step(){
+      const end=Math.min(calib.i+CHUNK, cycles.length);
+      for(;calib.i<end;calib.i++){
+        const c=cycles[calib.i];
+        if(c.anchorIdx < LOOKBACK+1) continue;
+        const labels=lookbackLabels(rows,c.anchorIdx,senseThr);
+        const res=computeBRI(labels, finalized[c.regime]);
+        let bin=Math.floor(res.bri/10); if(bin>9)bin=9; if(bin<0)bin=0;
+        calib.bins[bin].total++;
+        if(c.type==='Blast') calib.bins[bin].blast++;
+      }
+      onProgress && onProgress(calib.i, cycles.length);
+      if(calib.i<cycles.length) setTimeout(step,0);
+      else resolve(calib.bins);
+    }
+    step();
+  });
+}
+
+function computeBRI(liveLabels, finalizedRegimeList){
+  const lookup = new Map(finalizedRegimeList.map(e => [e.key, e]));
+  const liveKeys = extractEvidenceKeys(liveLabels);
+
+  const active = [];
+  let logSum = 0;
+  liveKeys.forEach(k => {
+    const e = lookup.get(k);
+    if(!e) return; // not in library (didn't meet min sample size) — skip
+    logSum += e.logLR;
+    active.push(e);
+  });
+
+  // Sigmoid squashing: BRI = 100 / (1 + e^-logSum), centered at 50 when logSum=0
+  const bri = 100 / (1 + Math.exp(-logSum));
+
+  // NOTE (v6.2, presentation-only): positiveCount/negativeCount below are the
+  // FULL counts before the top-5 display slice. No new math — same filter
+  // operation, just reported before .slice(0,5) truncates it for the UI.
+  const positiveAll = active.filter(e => e.lr > 1).sort((a,b) => b.lr - a.lr);
+  const negativeAll = active.filter(e => e.lr < 1).sort((a,b) => a.lr - b.lr);
+  const positive = positiveAll.slice(0,5);
+  const negative = negativeAll.slice(0,5);
+
+  return {
+    bri, logSum, activeCount: active.length, positive, negative,
+    positiveCount: positiveAll.length, negativeCount: negativeAll.length,
+  };
+}
+
+// =============================================================================
+// ORCHESTRATION — chunked, interrupt-resilient processing
+// =============================================================================
+// Per blueprint: process in deterministic phases, validate each stage
+// independently, no monolithic loop. Progress reported via callback.
+// No browser persistence — a reload simply restarts from Phase 1.
+// =============================================================================
+function runEngineB(rows, thresh, minSamples, onProgress){
+  return new Promise((resolve, reject) => {
+    const state = {};
+
+    function step(phase, fn){
+      onProgress && onProgress(phase.label, phase.pct);
+      // yield to the event loop so the UI can repaint between phases
+      return new Promise(res => setTimeout(() => { try { res(fn()); } catch(e){ reject(e); } }, 0));
+    }
+
+    (async () => {
+      // Phase 1 — Cycle Generation
+      const cycles = await step({label:'Detecting Blast & Miss cycles…', pct:15}, () => {
+        const c = generateCycles(rows, thresh);
+        if(!c.length) throw new Error('No cycles detected — check data length and threshold.');
+        return c;
+      });
+      state.cycles = cycles;
+
+      // Phase 2 — Sense Engine thresholds
+      const senseThr = await step({label:'Computing Sense Engine thresholds…', pct:35}, () => {
+        return computeSenseThresholds(rows);
+      });
+      state.senseThr = senseThr;
+
+      // Phase 3 — Evidence Library construction
+      const library = await step({label:'Building Evidence Library…', pct:60}, () => {
+        return buildEvidenceLibrary(cycles, senseThr, rows);
+      });
+      state.library = library;
+
+      // Phase 4 — Finalize (LR + min-sample filter)
+      const { finalized, totals } = await step({label:'Computing Likelihood Ratios…', pct:80}, () => {
+        return finalizeLibrary(library, cycles, minSamples);
+      });
+      state.finalized = finalized;
+      state.totals = totals;
+
+      // Phase 5 — Today live signal + BRI
+      const result = await step({label:'Scoring live signal…', pct:95}, () => {
+        const todayIdx = rows.length - 1;
+        const todayRegime = getRegime(rows, todayIdx);
+        const lastCycle = cycles[cycles.length-1];
+        const liveLabels = (todayIdx >= LOOKBACK)
+          ? lookbackLabels(rows, todayIdx + 1, senseThr) // virtual anchor: today = Day -1
+          : null;
+        const briResult = liveLabels ? computeBRI(liveLabels, finalized[todayRegime]) : null;
+
+        return {
+          rows, cycles, senseThr, finalized, totals,
+          todayIdx, todayRegime, lastCycle, liveLabels, briResult,
+          minSamples, thresh,
+        };
+      });
+
+      onProgress && onProgress('Done', 100);
+      resolve(result);
+    })().catch(reject);
+  });
+}
+
+
+// =============================================================================
+// RENDER
+// =============================================================================
+let R = null;
+let activeLibRegime = "HighSptR";
+let activeLibType   = "singleDay";
+let cycListExpanded = false;
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+function mc(label,value,sub){
+  return`<div class="mc"><div class="ml">${label}</div><div class="mv">${value}</div><div class="ms">${sub}</div></div>`;
+}
+function fv(v,fs=22){return`<span style="font-size:${fs}px;line-height:1.3;display:block;margin-top:2px">${v}</span>`;}
+function lrCls(l){ return l>1 ? "lr-pos" : l<1 ? "lr-neg" : ""; }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRESENTATION-ONLY LABELS (v6.2, LOCKED where noted)
+//   These functions interpret already-computed values (bri, logSum, lr) into
+//   trader-friendly language. They read math output — they never feed back
+//   into it. Adjusting these thresholds changes wording only, never scores.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// LOCKED — BRI status bands (0-30 Low / 31-60 Neutral / 61-80 Elevated / 81-100 High)
+function briStatus(bri){
+  if(bri <= 30) return { label:'Low',      cls:'bri-low'      };
+  if(bri <= 60) return { label:'Neutral',  cls:'bri-neutral'  };
+  if(bri <= 80) return { label:'Elevated', cls:'bri-elevated' };
+  return            { label:'High',     cls:'bri-high'     };
+}
+
+// Evidence Strength — magnitude of |logSum| (NOT the BRI score itself).
+// Bands are presentation defaults, adjustable without touching any math.
+function evidenceStrength(logSum){
+  const m = Math.abs(logSum);
+  if(m < 0.5) return 'Weak';
+  if(m < 1.5) return 'Moderate';
+  return 'Strong';
+}
+
+// ── Engine Interpretation (deterministic, rule-based — no free-form text) ────
+// Derived ONLY from bri (via briStatus, already locked) + confirmedRegime.
+// Same function feeds both Live Signal and Historical Replay so wording is
+// always identical for identical BRI bands. No AI-generated text.
+function engineInterpretation(bri, regime){
+  const status = briStatus(bri); // reuses the single locked BRI band definition
+  const table = {
+    High:     { icon:'🟢', cls:'interp-green',
+      text:`Today's market strongly resembles historical Blast cycles.`,
+      detail:`Historical evidence currently favors a volatility expansion within the evaluation window.`,
+      view:`Historical conditions have been favorable for long-volatility trades.` },
+    Elevated: { icon:'🟢', cls:'interp-green',
+      text:`Today's market leans toward historical Blast cycles.`,
+      detail:`Historical evidence moderately favors a volatility expansion within the evaluation window.`,
+      view:`Historical conditions have leaned favorable for long-volatility trades.` },
+    Neutral:  { icon:'🟡', cls:'interp-yellow',
+      text:`Today's market shows mixed historical characteristics.`,
+      detail:`Historical Blast and Miss evidence are relatively balanced. Confidence is moderate.`,
+      view:`Wait for additional confirmation.` },
+    Low:      { icon:'🟠', cls:'interp-amber',
+      text:`Today's market strongly resembles historical Miss cycles.`,
+      detail:`Historical evidence currently favors a low-volatility / slow-expansion environment. Exercise caution with new long-strangle entries.`,
+      view:`Similar historical conditions often produced poor long-strangle performance due to delayed or absent volatility expansion.` },
+  };
+  return { status: status.label, ...table[status.label] };
+}
+
+
+// Per-evidence-item label — symmetric in log-space (LR>=2x / LR<=0.5x are
+// the "Strong" bands, matching evidenceStrength's own 1.5-log-unit feel:
+// log(2)=0.69, log(0.5)=-0.69). Presentation defaults, adjustable freely.
+function evidenceItemLabel(lr){
+  if(lr >= 2.0) return { text:'Strong Positive', cls:'strong-pos' };
+  if(lr > 1.0)  return { text:'Positive',         cls:'pos'        };
+  if(lr <= 0.5) return { text:'Strong Negative',  cls:'strong-neg' };
+  return            { text:'Negative',         cls:'neg'        };
+}
+function toggleAbout(){
+  const panel=$("aboutPanel");
+  const visible=panel.style.display!=="none";
+  if(visible){panel.style.display="none";return;}
+  panel.style.display="block";
+  panel.innerHTML=
+    '<div class="wr-title">Version Information</div>'+
+    '<div class="wr-line"><span>Engine Version</span><span>'+VERSION.engine+'</span></div>'+
+    '<div class="wr-line"><span>Evidence Library Version</span><span>'+VERSION.evidenceLibrary+'</span></div>'+
+    '<div class="wr-line"><span>Blast Logic</span><span>'+VERSION.blastLogic+'</span></div>'+
+    '<div class="wr-line"><span>BRI Method</span><span>'+VERSION.briMethod+'</span></div>'+
+    '<div class="wr-line"><span>Architecture</span><span>'+VERSION.architecture+'</span></div>';
+}
+$("engineBadge").textContent = VERSION.engine;
+
+function toggleEvidenceLib(){
+  const p=$("libPanel"); const v=p.style.display!=="none";
+  p.style.display=v?"none":"block";
+  $("libToggleIcon").textContent=v?"▶ expand":"▼ collapse";
+}
+function toggleEvidenceDetail(){
+  const p=$("evDetailPanel"); const v=p.style.display!=="none";
+  p.style.display=v?"none":"block";
+  $("evDetailIcon").textContent=v?"▶ expand":"▼ collapse";
+}
+function toggleCycleList(){
+  cycListExpanded = !cycListExpanded;
+  $("cycTable").style.display = cycListExpanded ? "block" : "none";
+  $("cycToggleIcon").textContent = cycListExpanded ? "▼ collapse" : "▶ expand";
+}
+
+// ── summary ──────────────────────────────────────────────────────────────────
+function renderSummary(){
+  const{cycles,totals}=R;
+  const blastN = cycles.filter(c=>c.type==='Blast').length;
+  const missN  = cycles.filter(c=>c.type==='Miss').length;
+  const avgMove = blastN ? (cycles.filter(c=>c.type==='Blast').reduce((s,c)=>s+c.moveATR,0)/blastN).toFixed(2) : '—';
+  $("summaryGrid").innerHTML=
+    mc("Total cycles",fv(cycles.length),"Blast + Miss")+
+    mc("Blast cycles",fv(blastN),"HighSptR "+totals.HighSptR.blast+" · LowSptR "+totals.LowSptR.blast)+
+    mc("Miss cycles",fv(missN),"HighSptR "+totals.HighSptR.miss+" · LowSptR "+totals.LowSptR.miss)+
+    mc("Avg blast move",fv(avgMove+"×",18),"× ATR14")+
+    mc("Evidence Library",fv(R.finalized.HighSptR.length+R.finalized.LowSptR.length),"Learned objects · min sample "+R.minSamples)+
+    mc("Lookback",fv("9d",18),"Day −9 → Day −1");
+}
+
+// ── today / BRI live panel ────────────────────────────────────────────────────
+function renderToday(){
+  const{todayRegime,lastCycle,briResult,cycles,totals,finalized,minSamples}=R;
+
+  let html=`<div class="live-meta">
+    <div class="tc-cell">
+      <div class="tc-label">Regime</div>
+      <div class="tc-val"><span class="tag ${todayRegime==="HighSptR"?"tag-hi":"tag-lo"}">${todayRegime}</span></div>
+    </div>
+    <div class="tc-cell">
+      <div class="tc-label">Last cycle</div>
+      <div class="tc-val" style="font-size:13px">${lastCycle? lastCycle.type+' · '+lastCycle.anchorDate : '—'}</div>
+    </div>
+  </div>`;
+
+  if(!briResult){
+    html+=`<div style="padding:18px;font-size:12px;color:var(--text-muted)">Not enough history to score live signal (need ≥${LOOKBACK} bars)</div>`;
+    $("todayCard").innerHTML=html;
+    return;
+  }
+
+  const bri=briResult.bri;
+  const status=briStatus(bri);
+  const strength=evidenceStrength(briResult.logSum);
+
+  // ── 1. Blast Readiness Index — score + bar + status (no raw math shown) ──
+  html+=`<div class="bri-card ${status.cls}">
+    <div class="bri-label">Blast Readiness Index</div>
+    <div class="bri-score-row"><span class="bri-value">${bri.toFixed(0)}</span><span class="bri-max">/ 100</span></div>
+    <div class="bri-bar-bg"><div class="bri-bar-fill" style="width:${bri.toFixed(0)}%"></div></div>
+    <span class="bri-status-badge">${status.label}</span>
+  </div>`;
+
+  // ── 1b. Engine Interpretation — deterministic, plain-language ─────────────
+  const interp = engineInterpretation(bri, todayRegime);
+  html+=`<div class="interp-card ${interp.cls}">
+    <div class="interp-text">${interp.icon} ${interp.text}</div>
+    <div class="interp-detail">${interp.detail}</div>
+    <div class="interp-view">${interp.view}</div>
+  </div>`;
+
+  // ── 2. Today's Verdict ────────────────────────────────────────────────────
+  const net = briResult.positiveCount - briResult.negativeCount;
+  let behaviour;
+  if(briResult.activeCount===0){
+    behaviour = "No historical evidence currently matches today's pattern.";
+  } else if(net > 2){
+    behaviour = `Today's market currently resembles historical Blast cycles more than historical Miss cycles.`;
+  } else if(net < -2){
+    behaviour = `Today's market currently resembles historical Miss cycles more than historical Blast cycles.`;
+  } else {
+    behaviour = `Today's evidence is fairly balanced between historical Blast and Miss cycles.`;
+  }
+  html+=`<div class="info-card">
+    <h3>Today's Verdict</h3>
+    <div class="info-row"><span class="ir-label">Regime</span><span class="ir-val">${todayRegime}</span></div>
+    <div class="info-row"><span class="ir-label">Blast Readiness</span><span class="ir-val">${bri.toFixed(0)} / 100</span></div>
+    <div class="info-row"><span class="ir-label">Status</span><span class="ir-val">${status.label}</span></div>
+    <div class="info-row"><span class="ir-label">Evidence Strength</span><span class="ir-val">${strength}</span></div>
+    <div class="verdict-text">${behaviour}</div>
+  </div>`;
+
+  // ── 3-5. Training Summary / Evidence Summary / Top Evidence — collapsible ──
+  const blastN = cycles.filter(c=>c.type==='Blast').length;
+  const missN  = cycles.filter(c=>c.type==='Miss').length;
+  const libSize = finalized.HighSptR.length + finalized.LowSptR.length;
+  const blastRatePct = cycles.length ? (blastN/cycles.length*100) : 0;
+
+  html+=`<div class="sh" style="cursor:pointer;margin:0 18px 10px;" onclick="toggleEvidenceDetail()">
+    <h2>Evidence Detail <span id="evDetailIcon" style="font-size:10px;margin-left:6px;color:var(--accent);">▶ expand</span></h2>
+  </div>
+  <div id="evDetailPanel" style="display:none">
+    <div class="info-card">
+      <h3>Training Summary</h3>
+      <div class="stat-grid">
+        <div class="stat-cell"><div class="sc-label">Total Cycles</div><div class="sc-val">${cycles.length}</div></div>
+        <div class="stat-cell"><div class="sc-label">Blast Cycles</div><div class="sc-val">${blastN}</div></div>
+        <div class="stat-cell"><div class="sc-label">Miss Cycles</div><div class="sc-val">${missN}</div></div>
+        <div class="stat-cell"><div class="sc-label">Evidence Library</div><div class="sc-val">${libSize}</div><div class="sc-sub">Learned Objects</div></div>
+      </div>
+      <div class="info-row" style="margin-top:10px;"><span class="ir-label">Blast Rate</span><span class="ir-val">${blastN} / ${cycles.length} · ${blastRatePct.toFixed(1)}%</span></div>
+    </div>
+
+    <div class="info-card">
+      <h3>Evidence Summary</h3>
+      <div class="stat-grid">
+        <div class="stat-cell"><div class="sc-label">Active Evidence</div><div class="sc-val">${briResult.activeCount}</div></div>
+        <div class="stat-cell"><div class="sc-label">Positive</div><div class="sc-val" style="color:var(--green)">${briResult.positiveCount}</div></div>
+        <div class="stat-cell"><div class="sc-label">Negative</div><div class="sc-val" style="color:var(--red)">${briResult.negativeCount}</div></div>
+        <div class="stat-cell"><div class="sc-label">Net</div><div class="sc-val" style="color:${net>=0?'var(--green)':'var(--red)'}">${net>=0?'+':''}${net}</div></div>
+      </div>
+    </div>
+
+    <div class="evidence-cols">
+      <div class="evidence-group">
+        <h3>Top Positive Evidence</h3>
+        ${briResult.positive.length? briResult.positive.map(e=>evItem(e)).join('') : '<div style="font-size:11px;color:var(--text-muted)">None active</div>'}
+      </div>
+      <div class="evidence-group">
+        <h3>Top Negative Evidence</h3>
+        ${briResult.negative.length? briResult.negative.map(e=>evItem(e)).join('') : '<div style="font-size:11px;color:var(--text-muted)">None active</div>'}
+      </div>
+    </div>
+  </div>`;
+
+  // ── 6. Developer panel — raw math, collapsed by default ───────────────────
+  const rdbg = getRegimeDebug(R.rows, R.todayIdx);
+  html+=`<div class="dev-toggle" onclick="toggleDevPanel()">⚙ Developer details <span id="devToggleIcon">▶</span></div>
+  <div class="dev-panel" id="devPanel" style="display:none">
+    <div>logSum (raw): ${briResult.logSum.toFixed(4)}</div>
+    <div>activeCount: ${briResult.activeCount}</div>
+    <div>positiveCount (pre-Top5): ${briResult.positiveCount}</div>
+    <div>negativeCount (pre-Top5): ${briResult.negativeCount}</div>
+    <div>min sample threshold: ${minSamples}</div>
+    <div>BRI formula: 100 / (1 + e^-logSum)</div>
+    <div>— Regime Confirmation —</div>
+    <div>Raw Regime: ${rdbg.raw}</div>
+    <div>Confirmed Regime: ${rdbg.confirmed}</div>
+    <div>Current Streak: ${rdbg.streakCount}</div>
+    <div>Required Streak: ${REGIME_CONFIRM_STREAK}</div>
+    <div>Regime Changed Today: ${rdbg.changed}</div>
+    <div>Evidence Library Selected: ${todayRegime}</div>
+  </div>`;
+
+  $("todayCard").innerHTML=html;
+}
+function toggleDevPanel(){
+  const panel=$("devPanel");
+  const visible=panel.style.display!=="none";
+  panel.style.display=visible?"none":"block";
+  $("devToggleIcon").textContent=visible?"▶":"▼";
+}
+function evItem(e){
+  const p=parseEvidenceKey(e.key);
+  const lbl=evidenceItemLabel(e.lr);
+  return`<div class="ev-item">
+    <div class="ev-name">${p.label}</div>
+    <div class="ev-mid">
+      <span class="ev-label ${lbl.cls}">${lbl.text}</span>
+      <span class="ev-lr ${lrCls(e.lr)}">LR ${e.lr.toFixed(2)}×</span>
+    </div>
+  </div>`;
+}
+
+// ── cycle list (blast + miss, collapsible) ────────────────────────────────────
+function renderCycleList(){
+  const{cycles}=R;
+  const cont=$("cycTable");
+  const hdr=`<div class="cyc-hdr cyc-cols">
+    <div>#</div><div>Anchor</div><div>Type</div><div>Blast Date</div>
+    <div style="text-align:right">Days</div>
+    <div style="text-align:right">Move ATR</div>
+  </div>`;
+  const rows=cycles.slice().reverse().map((c,ri)=>{
+    const num=cycles.length-ri;
+    const typeTag=`<span class="tag ${c.type==='Blast'?'tag-up':'tag-lo'}">${c.type}</span>`;
+    return`<div class="cyc-row cyc-cols">
+      <div class="mono" style="color:var(--text-muted)">${num}</div>
+      <div class="mono">${c.anchorDate}</div>
+      <div>${typeTag}</div>
+      <div class="mono" style="color:var(--text-secondary)">${c.blastDate||'—'}</div>
+      <div class="num" style="text-align:right">${c.daysToBlast??'—'}</div>
+      <div class="num" style="text-align:right;color:var(--amber)">${c.moveATR!==null?c.moveATR.toFixed(2)+'×':'—'}</div>
+    </div>`;
+  }).join("");
+  cont.innerHTML=hdr+rows;
+}
+
+// ── evidence library table ────────────────────────────────────────────────────
+// ── Historical Daily Replay — score any past cycle exactly like live BRI ─────
+// Reuses computeBRI/lookbackLabels unchanged. Read-only, no math altered.
+function replayDay(dateStr){
+  const {rows,cycles,senseThr,finalized}=R;
+  const cycle = cycles.find(c => c.anchorDate === dateStr);
+  if(!cycle) return { error: `No cycle anchored on ${dateStr}. Try a date matching an Anchor Date in the Cycle List.` };
+  if(cycle.anchorIdx < LOOKBACK+1) return { error: `Insufficient history before ${dateStr} to replay.` };
+
+  const rawRegime = rawRegimeAt(rows, cycle.anchorIdx);
+  const labels = lookbackLabels(rows, cycle.anchorIdx, senseThr);
+  const res = computeBRI(labels, finalized[cycle.regime]);
+
+  return {
+    date: cycle.anchorDate,
+    rawRegime, confirmedRegime: cycle.regime,
+    bri: res.bri, logSum: res.logSum,
+    positiveCount: res.positiveCount, negativeCount: res.negativeCount,
+    activeCount: res.activeCount,
+    topPositive: res.positive, topNegative: res.negative,
+    outcome: cycle.type, daysToBlast: cycle.daysToBlast, moveATR: cycle.moveATR,
+  };
+}
+
+function runReplayUI(){
+  if(!R)return;
+  const dateStr=$("replayDate").value.trim();
+  const out=$("replayResult");
+  const r=replayDay(dateStr);
+  if(r.error){ out.innerHTML=`<div style="color:var(--red);font-size:12px">${r.error}</div>`; return; }
+
+  const status=briStatus(r.bri);
+  const interp=engineInterpretation(r.bri, r.confirmedRegime);
+
+  // deterministic consistency check: High/Elevated predicts Blast, Low predicts Miss,
+  // Neutral makes no directional claim (no consistency verdict shown)
+  let consistency='';
+  if(status.label==='High'||status.label==='Elevated'){
+    consistency = r.outcome==='Blast' ? '✓ Prediction Consistent' : '✗ Prediction Incorrect';
+  } else if(status.label==='Low'){
+    consistency = r.outcome==='Miss' ? '✓ Prediction Consistent' : '✗ Prediction Incorrect';
+  }
+  const consCls = consistency.startsWith('✓') ? 'lr-pos' : consistency.startsWith('✗') ? 'lr-neg' : '';
+
+  out.innerHTML=`
+    <div class="interp-card ${interp.cls}" style="margin:0 0 14px;">
+      <div class="interp-text">${interp.icon} ${interp.text}</div>
+      <div class="interp-detail">${interp.detail}</div>
+    </div>
+    <div class="info-row"><span class="ir-label">Date</span><span class="ir-val">${r.date}</span></div>
+    <div class="info-row"><span class="ir-label">Raw Regime</span><span class="ir-val">${r.rawRegime}</span></div>
+    <div class="info-row"><span class="ir-label">Confirmed Regime</span><span class="ir-val">${r.confirmedRegime}</span></div>
+    <div class="info-row"><span class="ir-label">BRI</span><span class="ir-val">${r.bri.toFixed(1)} (${status.label})</span></div>
+    <div class="info-row"><span class="ir-label">Actual Outcome</span><span class="ir-val">${r.outcome}${r.daysToBlast?` (Day ${r.daysToBlast})`:''}</span></div>
+    ${consistency?`<div class="info-row"><span class="ir-label">Result</span><span class="ir-val ${consCls}">${consistency}</span></div>`:''}
+    <div class="dev-toggle" onclick="toggleReplayDev()">⚙ Developer details <span id="replayDevIcon">▶</span></div>
+    <div class="dev-panel" id="replayDevPanel" style="display:none">
+      <div>logSum: ${r.logSum.toFixed(3)}</div>
+      <div>Active / Positive / Negative: ${r.activeCount} / ${r.positiveCount} / ${r.negativeCount}</div>
+      <div>Max ATR Move: ${r.moveATR!==null?r.moveATR.toFixed(2)+'×':'—'}</div>
+      <div>Top Positive: ${r.topPositive.map(e=>parseEvidenceKey(e.key).label+' ('+e.lr.toFixed(2)+'×)').join(', ')||'none'}</div>
+      <div>Top Negative: ${r.topNegative.map(e=>parseEvidenceKey(e.key).label+' ('+e.lr.toFixed(2)+'×)').join(', ')||'none'}</div>
+    </div>
+  `;
+}
+function toggleReplayDev(){
+  const p=$("replayDevPanel"); const v=p.style.display!=="none";
+  p.style.display=v?"none":"block";
+  $("replayDevIcon").textContent=v?"▶":"▼";
+}
+
+
+async function runCalibrationUI(){
+  if(!R)return;
+  btn.disabled=true;
+  try{
+    const bins=await runCalibration((i,total)=>{
+      btn.textContent=`Running… ${i}/${total}`;
+    });
+    renderCalibTable(bins);
+    btn.textContent="Run Calibration";
+  }catch(e){
+    console.error("[Engine B] calibration error:",e);
+    btn.textContent="Run Calibration";
+  }
+  btn.disabled=false;
+}
+function renderCalibTable(bins){
+  const cont=$("calibTable");
+  const hdr=`<div class="lib-cols lib-hdr" style="grid-template-columns:1fr 90px 90px 90px;">
+    <div>BRI Range</div><div style="text-align:right">Total</div>
+    <div style="text-align:right">Blast</div><div style="text-align:right">Blast %</div>
+  </div>`;
+  const rows=bins.map((b,i)=>{
+    const pct=b.total? (b.blast/b.total*100).toFixed(1) : '—';
+    return`<div class="lib-row lib-cols" style="grid-template-columns:1fr 90px 90px 90px;">
+      <div>${i*10}–${i*10+10}</div>
+      <div class="num" style="text-align:right">${b.total}</div>
+      <div class="num" style="text-align:right">${b.blast}</div>
+      <div class="num" style="text-align:right;font-weight:600">${pct}${b.total?'%':''}</div>
+    </div>`;
+  }).join("");
+  cont.innerHTML=hdr+rows;
+}
+
+function renderLibTable(){
+  const cont=$("libTable");
+  const list=R.finalized[activeLibRegime].filter(e => parseEvidenceKey(e.key).type === activeLibType);
+  const hdr=`<div class="lib-cols lib-hdr">
+    <div>Evidence</div>
+    <div style="text-align:right">Blast Count</div>
+    <div style="text-align:right">Miss Count</div>
+    <div style="text-align:right">Sample</div>
+    <div style="text-align:right">LR</div>
+  </div>`;
+  if(!list.length){
+    cont.innerHTML=hdr+`<div style="padding:16px;font-size:12px;color:var(--text-muted)">No evidence objects meet the minimum sample size (${R.minSamples}) for this regime/type.</div>`;
+    return;
+  }
+  const rows=list.map(e=>{
+    const p=parseEvidenceKey(e.key);
+    return`<div class="lib-row lib-cols">
+      <div style="font-size:12px;color:var(--text-secondary)">${p.label}</div>
+      <div class="num" style="text-align:right">${e.blastCount}</div>
+      <div class="num" style="text-align:right">${e.missCount}</div>
+      <div class="num" style="text-align:right;color:var(--text-muted)">${e.sample}</div>
+      <div class="num ${lrCls(e.lr)}" style="text-align:right;font-weight:600">${e.lr.toFixed(2)}×</div>
+    </div>`;
+  }).join("");
+  cont.innerHTML=hdr+rows;
+}
+
+// =============================================================================
+// CONSISTENCY VALIDATION — run before every export, never export silently
+// bad data. Checks exactly the rules requested for audit trust:
+//   - Anchor uniqueness (no duplicate anchorIdx)
+//   - Blast + Miss == Total cycles
+//   - daysToBlast always within [1, FORWARD_WINDOW] for Blast cycles
+//   - Miss cycles always consume the full FORWARD_WINDOW (next anchor jump
+//     is exactly anchorIdx + FORWARD_WINDOW)
+//   - Blast cycles jump next anchor to exactly blastIdx
+// =============================================================================
+// ── export-only helper: derives peak-day/peak-value/first-1x-day from the
+// window using values already stored on the cycle. No core math changed. ────
+function computeWindowPath(rows, c){
+  const ac=c.anchorClose, a14=c.anchorATR14;
+  const start=c.anchorIdx+1;
+  const end = c.type==='Blast' ? c.blastIdx : Math.min(c.anchorIdx+FORWARD_WINDOW, rows.length-1);
+  let peakDay=null, peakVal=-Infinity, firstDayAbove1=null;
+  for(let idx=start; idx<=end; idx++){
+    const fr=rows[idx];
+    const mmATR = a14>0 ? Math.max(Math.abs(fr.high-ac),Math.abs(ac-fr.low))/a14 : 0;
+    const dayNum=idx-c.anchorIdx;
+    if(mmATR>peakVal){peakVal=mmATR;peakDay=dayNum;}
+    if(firstDayAbove1===null && mmATR>=1.0) firstDayAbove1=dayNum;
+  }
+  return {peakDay, peakVal, firstDayAbove1, actualDaysEvaluated:end-start+1};
+}
+
+function validateCycles(cycles){
+  const issues = [];
+  const seenAnchors = new Set();
+
+  cycles.forEach((c, i) => {
+    if(seenAnchors.has(c.anchorIdx)){
+      issues.push(`Cycle #${i+1} (${c.anchorDate}): duplicate Anchor Index ${c.anchorIdx}`);
+    }
+    seenAnchors.add(c.anchorIdx);
+
+    if(c.type === 'Blast'){
+      if(c.daysToBlast < 1 || c.daysToBlast > FORWARD_WINDOW){
+        issues.push(`Cycle #${i+1} (${c.anchorDate}): Days to Blast (${c.daysToBlast}) outside [1, ${FORWARD_WINDOW}]`);
+      }
+    }
+  });
+
+  const blastN = cycles.filter(c => c.type === 'Blast').length;
+  const missN  = cycles.filter(c => c.type === 'Miss').length;
+  if(blastN + missN !== cycles.length){
+    issues.push(`Blast (${blastN}) + Miss (${missN}) ≠ Total Cycles (${cycles.length})`);
+  }
+
+  for(let i = 1; i < cycles.length; i++){
+    const prev = cycles[i-1], curr = cycles[i];
+    if(curr.anchorIdx <= prev.anchorIdx){
+      issues.push(`Cycle #${i+1} (${curr.anchorDate}): Anchor Index did not advance past previous cycle`);
+      continue;
+    }
+    if(prev.type === 'Miss'){
+      const expected = prev.anchorIdx + FORWARD_WINDOW;
+      if(curr.anchorIdx !== expected){
+        issues.push(`Cycle #${i+1} (${curr.anchorDate}): Miss cycle #${i} did not consume the full ${FORWARD_WINDOW}-day window (expected next anchor at index ${expected}, got ${curr.anchorIdx})`);
+      }
+    } else if(prev.type === 'Blast'){
+      const expected = prev.blastIdx;
+      if(curr.anchorIdx !== expected){
+        issues.push(`Cycle #${i+1} (${curr.anchorDate}): Blast cycle #${i} did not jump to the blast row as next anchor (expected index ${expected}, got ${curr.anchorIdx})`);
+      }
+    }
+  }
+
+  cycles.forEach((c,i)=>{
+    if(c.type==='Blast'){
+      const winEnd = c.anchorIdx + FORWARD_WINDOW;
+      if(c.blastIdx < c.anchorIdx+1 || c.blastIdx > winEnd){
+        issues.push(`Cycle #${i+1} (${c.anchorDate}): Blast Date outside its evaluation window`);
+      }
+    }
+  });
+
+  return { passed: issues.length === 0, issues };
+}
+
+// =============================================================================
+// CSV EXPORT
+// =============================================================================
+function exportCSV(){
+  if(!R)return;
+
+  const validation = validateCycles(R.cycles);
+  if(!validation.passed){
+    const msg = "Export blocked — cycle data failed consistency validation:\n\n"
+      + validation.issues.slice(0,10).join("\n")
+      + (validation.issues.length>10 ? `\n…and ${validation.issues.length-10} more issue(s).` : "")
+      + "\n\nNo file was written. Please investigate before exporting.";
+    $("errorBar").textContent = "Export blocked — "+validation.issues.length+" consistency issue(s) found.";
+    $("errorBar").classList.add("active");
+    alert(msg);
+    console.error("[Engine B] Export validation failed:", validation.issues);
+    return;
+  }
+
+  const lines=[];
+  const rows=R.rows;
+  const blastN=R.cycles.filter(c=>c.type==='Blast').length;
+  const missN=R.cycles.filter(c=>c.type==='Miss').length;
+  const blastRate = R.cycles.length ? (blastN/R.cycles.length*100).toFixed(2) : '0.00';
+
+  // ── Section 1: dataset metadata ───────────────────────────────────────────
+  lines.push("# ENGINE B — RESEARCH DATASET EXPORT (schema frozen v1)");
+  lines.push("# EngineVersion,"+VERSION.engine);
+  lines.push("# ArchitectureVersion,"+VERSION.architecture);
+  lines.push("# ExportTimestamp,"+new Date().toISOString());
+  lines.push("# TotalCycles,"+R.cycles.length);
+  lines.push("# BlastCount,"+blastN);
+  lines.push("# MissCount,"+missN);
+  lines.push("# BlastRatePct,"+blastRate);
+  lines.push("# EvaluationWindowDays,"+FORWARD_WINDOW);
+  lines.push("# LookbackWindowDays,"+LOOKBACK);
+  lines.push("# EvidenceLibraryVersion,"+VERSION.evidenceLibrary);
+  lines.push("# RegimeConfirmationStreak,"+REGIME_CONFIRM_STREAK);
+  lines.push("# MinimumSample,"+R.minSamples);
+  lines.push("# ValidationStatus,PASSED");
+  lines.push("");
+
+  // ── Section 2+3+5: cycle-level + research + replay-compatibility fields ──
+  const dayHeaders=[]; for(let d=LOOKBACK; d>=1; d--) dayHeaders.push("D-"+d);
+
+  lines.push("# CYCLE_DATASET");
+  lines.push([
+    "CycleID","AnchorDate","Outcome","BlastDate","DaysToBlast","CycleAgeAtBlast",
+    "RawRegime","ConfirmedRegime","AnchorClose","ATR14","MaxATRMove","Direction",
+    "EvalStart","EvalEnd","EvalWindowLengthDays","ActualDaysEvaluated",
+    "PeakATRDay","PeakATRValue","FirstDayATRAbove1x",
+    "HistoricalBRI","HistoricalLogSum","ActiveEvidenceCount","PositiveEvidenceCount","NegativeEvidenceCount",
+    "ReplayPrediction","ReplayCorrect",
+    ...dayHeaders.map(d=>d.replace('-','Minus')+"_Quiet"),
+    ...dayHeaders.map(d=>d.replace('-','Minus')+"_Dir"),
+  ].join(","));
+
+  R.cycles.forEach((c,i)=>{
+    const winStartIdx=c.anchorIdx+1, winEndIdx=Math.min(c.anchorIdx+FORWARD_WINDOW, rows.length-1);
+    const winStart=rows[winStartIdx]?rows[winStartIdx].date:'';
+    const winEnd=rows[winEndIdx]?rows[winEndIdx].date:'';
+    const rawRegime=rawRegimeAt(rows, c.anchorIdx);
+
+    let qCols=dayHeaders.map(()=>''), dCols=dayHeaders.map(()=>'');
+    let bri='', logSum='', activeN='', posN='', negN='', pred='', correct='';
+    let peakDay='', peakVal='', firstAbove1='', evalLen='', actualDays='';
+
+    if(c.anchorIdx>=LOOKBACK+1){
+      const labels=lookbackLabels(rows,c.anchorIdx,R.senseThr);
+      qCols=labels.map(lb=>lb?lb.qLabel:'');
+      dCols=labels.map(lb=>lb?lb.dLabel:'');
+
+      const res=computeBRI(labels, R.finalized[c.regime]);
+      bri=res.bri.toFixed(2); logSum=res.logSum.toFixed(4);
+      activeN=res.activeCount; posN=res.positiveCount; negN=res.negativeCount;
+      const status=briStatus(res.bri);
+      pred=status.label;
+      if(status.label==='High'||status.label==='Elevated') correct = c.type==='Blast' ? 'TRUE':'FALSE';
+      else if(status.label==='Low') correct = c.type==='Miss' ? 'TRUE':'FALSE';
+      else correct='';
+    }
+
+    const wp=computeWindowPath(rows,c);
+    peakDay=wp.peakDay??''; peakVal=wp.peakVal>-Infinity?wp.peakVal.toFixed(3):'';
+    firstAbove1=wp.firstDayAbove1??''; actualDays=wp.actualDaysEvaluated;
+    evalLen=FORWARD_WINDOW;
+
+    lines.push([
+      "C"+c.anchorIdx, c.anchorDate, c.type, c.blastDate||'', c.daysToBlast??'', c.daysToBlast??'',
+      rawRegime, c.regime, c.anchorClose.toFixed(2), c.anchorATR14.toFixed(3),
+      c.moveATR!==null?c.moveATR.toFixed(3):'', c.direction||'',
+      winStart, winEnd, evalLen, actualDays,
+      peakDay, peakVal, firstAbove1,
+      bri, logSum, activeN, posN, negN,
+      pred, correct,
+      ...qCols, ...dCols,
+    ].join(","));
+  });
+  lines.push("");
+
+  // ── evidence library — unchanged format, per regime ───────────────────────
+  for(const regime of ["HighSptR","LowSptR"]){
+    lines.push("# EVIDENCE_LIBRARY_"+regime);
+    lines.push("Key,BlastCount,MissCount,Sample,LR");
+    R.finalized[regime].forEach(e=>{
+      lines.push([`"${e.key}"`,e.blastCount,e.missCount,e.sample,e.lr.toFixed(4)].join(","));
+    });
+    lines.push("");
+  }
+
+  const blob=new Blob([lines.join("\n")],{type:"text/csv"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="engine_b_v6_research_audit.csv";
+  a.click();
+}
+
+
+// =============================================================================
+// WIRING
+// =============================================================================
+let rawCSV=null;
+
+document.querySelectorAll(".ds-tab").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    document.querySelectorAll(".ds-tab").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    $("dsSrcUrl").style.display=btn.dataset.src==="url"?"block":"none";
+    $("dsSrcFile").style.display=btn.dataset.src==="file"?"block":"none";
+  });
+});
+
+$("fetchBtn").addEventListener("click",async()=>{
+  const url=$("csvUrl").value.trim();if(!url)return;
+  const btn=$("fetchBtn");
+  btn.classList.add("loading");btn.textContent="Fetching…";
+  $("errorBar").classList.remove("active");
+  $("washReport").style.display="none";
+  try{
+    console.log("[Engine B] Fetching:",url);
+    const res=await fetch(url,{mode:"cors"});
+    console.log("[Engine B] Status:",res.status);
+    if(!res.ok)throw new Error("HTTP "+res.status+" "+res.statusText);
+    const text=await res.text();
+    console.log("[Engine B] Got "+text.length+" chars | First 80:",text.slice(0,80));
+    if(!text||text.length<100)throw new Error("Response too short — got "+text.length+" chars");
+    rawCSV=text;
+    $("runBtn").disabled=false;
+    btn.textContent="✓ Fetched — click Run Engine B";
+    btn.style.color="var(--green)";
+    setTimeout(()=>{btn.textContent="Fetch";btn.style.color="";btn.classList.remove("loading");},3500);
+  }catch(err){
+    console.error("[Engine B] Fetch error:",err);
+    btn.classList.remove("loading");btn.textContent="Fetch";
+    $("errorBar").textContent="Fetch failed: "+err.message+" — Try File Upload instead, or ensure the sheet is published publicly.";
+    $("errorBar").classList.add("active");
+  }
+});
+
+$("csvInput").addEventListener("change",e=>{
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{rawCSV=ev.target.result;$("runBtn").disabled=false;};
+  reader.readAsText(file);
+});
+
+const fz=$("fileZone");
+fz.addEventListener("dragover",e=>{e.preventDefault();fz.classList.add("drag");});
+fz.addEventListener("dragleave",()=>fz.classList.remove("drag"));
+fz.addEventListener("drop",e=>{
+  e.preventDefault();fz.classList.remove("drag");
+  const file=e.dataTransfer.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{rawCSV=ev.target.result;$("runBtn").disabled=false;};
+  reader.readAsText(file);
+});
+
+$("runBtn").addEventListener("click",()=>{
+  if(!rawCSV)return;
+  const thresh=parseFloat($("blastThresh").value)||2;
+  const minSamples=parseInt($("minSamples").value)||5;
+
+  $("errorBar").classList.remove("active");
+  $("statusBar").classList.add("active");
+  $("emptyState").style.display="none";
+  $("results").classList.remove("active");
+  $("progressFill").style.width="0%";
+
+  setTimeout(async()=>{
+    try{
+      const washed=washCSV(rawCSV);
+      showWashReport(washed.report);
+
+      const onProgress=(label,pct)=>{
+        $("statusText").textContent=label;
+        $("progressFill").style.width=pct+"%";
+      };
+
+      R=await runEngineB(washed.rows,thresh,minSamples,onProgress);
+
+      $("statusBar").classList.remove("active");
+      $("results").classList.add("active");
+
+      try{renderSummary();}catch(e){console.error("renderSummary:",e);}
+      try{renderToday();}catch(e){console.error("renderToday:",e);}
+      try{renderCycleList();}catch(e){console.error("renderCycleList:",e);}
+      try{renderLibTable();}catch(e){console.error("renderLibTable:",e);}
+    }catch(err){
+      $("statusBar").classList.remove("active");
+      $("errorBar").textContent="Engine error: "+err.message;$("errorBar").classList.add("active");
+      console.error("[Engine B] run error:",err);
+      $("emptyState").style.display="block";
+    }
+  },10);
+});
+
+document.querySelectorAll("#libRegimeTabs .ltab").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    document.querySelectorAll("#libRegimeTabs .ltab").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active"); activeLibRegime=btn.dataset.regime;
+    renderLibTable();
+  });
+});
+
+document.querySelectorAll("#libTypeTabs .ltab").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    document.querySelectorAll("#libTypeTabs .ltab").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active"); activeLibType=btn.dataset.type;
+    renderLibTable();
+  });
+});
+
+$("exportBtn").addEventListener("click",exportCSV);
+
+function toggleSetupPanels(){
+  const style=$("autoRunStyle");
+  const hidden = style.sheet ? true : !style.disabled; // simple flag via disabled attr
+  style.disabled = !style.disabled;
+  $("showSetupBtn").textContent = style.disabled ? "⚙ Show Setup" : "⚙ Hide Setup";
+}
+
+// ── auto-run on load: fetch default URL, then run engine automatically ───────
+window.addEventListener("DOMContentLoaded", ()=>{
+  $("fetchBtn").click();
+  const check=setInterval(()=>{
+    if(!$("runBtn").disabled){
+      clearInterval(check);
+      $("runBtn").click();
+    }
+  },300);
+});
+
+
+</script>
+</body>
+</html>
