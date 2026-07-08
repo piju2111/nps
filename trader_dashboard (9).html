@@ -1,0 +1,1951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Engine C — Trader Dashboard</title>
+<style>
+:root{--card-bg:#ffffff;--page-bg:#f1f5f9;--border:#e2e8f0;--text-primary:#0f172a;--text-muted:#475569;
+--accent-blue:#2563eb;--accent-green:#16a34a;--accent-amber:#d97706;--accent-red:#dc2626;--accent-purple:#7c3aed;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--page-bg);color:var(--text-primary);font-family:Inter,-apple-system,'Segoe UI',system-ui,sans-serif;font-size:16px;line-height:1.55;padding:16px;letter-spacing:-.01em;}
+.app{max-width:900px;margin:0 auto;}
+h1{font-size:24px;font-weight:800;margin-bottom:2px;}
+.subtitle{color:var(--text-muted);font-size:13px;margin-bottom:20px;}
+.card{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;padding:22px;margin-bottom:18px;box-shadow:0 1px 4px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);}
+.card h2{font-size:14px;font-weight:800;margin-bottom:14px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;}
+input[type=file]{color:var(--text-muted);font-size:14px;}
+input[type=number]{background:#f8fafc;border:1px solid var(--border);color:var(--text-primary);border-radius:8px;padding:8px 10px;width:80px;font-size:15px;}
+button{background:var(--accent-blue);color:#fff;border:none;border-radius:12px;padding:12px 20px;font-size:15px;font-weight:700;cursor:pointer;margin-right:8px;box-shadow:0 1px 2px rgba(0,0,0,.08);}
+button.tab{background:#f1f5f9;color:var(--text-muted);border:1px solid var(--border);}
+button.tab.active{background:var(--accent-blue);color:#fff;}
+table{width:100%;border-collapse:collapse;font-size:14px;}
+th,td{padding:10px 10px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;}
+th:first-child,td:first-child{text-align:left;color:var(--text-muted);}
+th{color:var(--text-muted);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;}
+.status{font-size:13px;color:var(--text-muted);margin-top:10px;white-space:pre-wrap;}
+.err{color:var(--accent-red);font-size:13px;margin-top:10px;font-weight:600;}
+.grid4{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
+@media(min-width:640px){.grid4{grid-template-columns:repeat(4,1fr);}}
+.metric{background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center;}
+.metric .v{font-size:24px;font-weight:800;color:var(--text-primary);}
+.metric .l{font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-top:6px;font-weight:700;letter-spacing:.03em;}
+.pill{display:inline-flex;align-items:center;border-radius:999px;font-size:13px;font-weight:800;padding:5px 14px;letter-spacing:.02em;}
+.pill.high,.pill.blast{background:#fee2e2;color:var(--accent-red);}
+.pill.low,.pill.miss{background:#dcfce7;color:var(--accent-green);}
+.pill.medium{background:#fef3c7;color:var(--accent-amber);}
+.pill.conflict{background:#fecaca;color:#991b1b;}
+.tabs{margin-bottom:18px;display:flex;gap:8px;flex-wrap:wrap;}
+.tabcontent{display:none;}
+.tabcontent.active{display:block;}
+.scroll{max-height:420px;overflow:auto;}
+.why{font-size:15px;line-height:1.9;}
+.controls{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:10px;}
+label{font-size:13px;color:var(--text-muted);font-weight:600;}
+.hero{background:linear-gradient(135deg,#eff6ff,#faf5ff);border:1px solid #dbeafe;}
+.hero-score{font-size:4rem;font-weight:200;line-height:1;background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple));-webkit-background-clip:text;background-clip:text;color:transparent;}
+.hero-label{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:6px;}
+.hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px;}
+@media(min-width:640px){.hero-grid{grid-template-columns:repeat(4,1fr);}}
+.hero-tile{background:rgba(255,255,255,.7);border:1px solid var(--border);border-radius:14px;padding:16px;text-align:center;}
+.hero-tile .v{font-size:22px;font-weight:800;}
+.hero-tile .l{font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;margin-top:6px;}
+.gauge-track{background:#e2e8f0;border-radius:999px;height:14px;overflow:hidden;margin-top:10px;}
+.gauge-fill{height:14px;border-radius:999px;transition:width .6s ease;}
+.badge{display:inline-flex;align-items:center;gap:4px;border-radius:10px;font-size:13px;font-weight:800;padding:6px 12px;margin:2px;}
+.badge.blue{background:#dbeafe;color:#1e40af;}
+.badge.purple{background:#ede9fe;color:#5b21b6;}
+.badge.green{background:#dcfce7;color:#166534;}
+.badge.amber{background:#fef3c7;color:#92400e;}
+.badge.red{background:#fee2e2;color:#991b1b;}
+.badge.slate{background:#f1f5f9;color:#334155;}
+.stars{font-size:20px;letter-spacing:2px;color:#e2e8f0;}
+.stars .filled{color:var(--accent-amber);}
+.flow{display:flex;flex-direction:column;gap:4px;align-items:center;text-align:center;margin-top:10px;}
+.flow-step{background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:12px 20px;width:100%;max-width:420px;}
+.flow-step .k{font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;}
+.flow-step .val{font-size:18px;font-weight:800;margin-top:2px;}
+.flow-arrow{font-size:18px;color:var(--text-muted);}
+.warning-banner{background:#fff7ed;border:2px solid var(--accent-amber);border-radius:14px;padding:16px;margin-top:14px;}
+.warning-banner .title{font-weight:800;color:#9a3412;font-size:15px;}
+.evidence-highlight{background:linear-gradient(135deg,#f0fdf4,#eff6ff);border:1px solid #bbf7d0;border-radius:14px;padding:20px;text-align:center;}
+.evidence-highlight .big{font-size:2.2rem;font-weight:800;color:var(--accent-green);}
+.version-tag{display:inline-block;background:#0f172a;color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:8px;letter-spacing:.04em;margin-left:8px;vertical-align:middle;}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <h1>Engine C — Trader Dashboard<span class="version-tag">v1.0 RC</span></h1>
+  <div class="subtitle">NIFTY Options Blast Cycle Intelligence — Engine A (Structure) + Engine B (Volatility Readiness) + Decision Layer</div>
+
+  <div class="card" id="statusBar">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+      <div>
+        <span id="sourceIndicator">⚪ Data Source: —</span>
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        <span id="lastTradingDate">Last Trading Date: —</span>
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        <span id="lastUpdated">Last Updated: —</span>
+      </div>
+      <div>
+        <button id="refreshBtn">🔄 Refresh</button>
+        <button id="showUploadBtn" class="tab">Upload Local CSV</button>
+      </div>
+    </div>
+    <div class="controls" id="uploadPanel" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
+      <input type="file" id="csvFile" accept=".csv" />
+      <label>Blast ATR Multiplier <input type="number" id="threshInput" value="2" step="0.1"></label>
+      <label>Min Evidence Samples <input type="number" id="minSamplesInput" value="5" step="1"></label>
+      <button id="runUploadBtn" disabled>Run Pipeline On Uploaded File</button>
+    </div>
+    <div class="status" id="loadStatus"></div>
+    <div class="err" id="loadErr"></div>
+  </div>
+
+  <div id="results" style="display:none">
+    <div class="tabs">
+      <button class="tab active" data-tab="overview">Today</button>
+      <button class="tab" data-tab="engineA">Engine A</button>
+      <button class="tab" data-tab="engineB">Engine B</button>
+      <button class="tab" data-tab="engineC">Engine C</button>
+      <button class="tab" data-tab="validation">Validation</button>
+      <button class="tab" data-tab="docs">Docs</button>
+    </div>
+
+    <div class="tabcontent active" id="tab-overview">
+      <div class="card hero">
+        <div class="hero-label">Today's Decision — <span id="heroDate">—</span></div>
+        <div class="hero-score" id="heroConviction">—</div>
+        <div id="heroConvictionLabel" style="font-size:14px;font-weight:800;margin-top:2px;">CONVICTION SCORE (0–100)</div>
+        <div class="gauge-track"><div class="gauge-fill" id="heroGaugeFill" style="width:0%;background:#94a3b8;"></div></div>
+        <div class="hero-grid">
+          <div class="hero-tile"><div class="v" id="heroBlastProb">—</div><div class="l">Blast Probability</div></div>
+          <div class="hero-tile"><div class="v" id="heroReliability">—</div><div class="l">Reliability</div></div>
+          <div class="hero-tile"><div class="v" id="heroAgreement">—</div><div class="l">Agreement</div></div>
+          <div class="hero-tile"><div class="v" id="heroPosition" style="font-size:16px;">—</div><div class="l">Suggested Position</div></div>
+        </div>
+        <div id="heroConflictWarning"></div>
+      </div>
+
+      <div class="card">
+        <h2>Why This Probability? (Explainability)</h2>
+        <div class="flow" id="explainFlow"></div>
+      </div>
+
+      <div id="consistencyWarningSlot"></div>
+
+      <div id="engineBDevDiagSlot"></div>
+
+      <div class="card">
+        <h2>Engine A — Market Structure</h2>
+        <div id="engineASummary"></div>
+      </div>
+
+      <div class="card">
+        <h2>Engine B — Volatility Readiness</h2>
+        <div class="why" id="engineBSummary"></div>
+      </div>
+
+      <div class="card">
+        <h2>Supporting Historical Evidence</h2>
+        <div class="evidence-highlight" id="evidenceSummary"></div>
+      </div>
+    </div>
+
+    <div class="tabcontent" id="tab-engineA">
+      <div class="card">
+        <h2>Engine A — Market Structure (last 60 rows)</h2>
+        <div class="scroll"><table id="tableA"></table></div>
+      </div>
+    </div>
+
+    <div class="tabcontent" id="tab-engineB">
+      <div class="card">
+        <h2>Engine B — Cycles (last 60)</h2>
+        <div class="grid4" id="engineBMetrics" style="margin-bottom:12px;"></div>
+        <div class="scroll"><table id="tableB"></table></div>
+      </div>
+    </div>
+
+    <div class="tabcontent" id="tab-engineC">
+      <div class="card">
+        <h2>Decision Panel (last 60 days)</h2>
+        <div class="scroll"><table id="tableC"></table></div>
+      </div>
+      <div class="card">
+        <h2>Decision Matrix (Bucket A × Bucket B → Historical Blast Rate)</h2>
+        <div id="matrixTable"></div>
+      </div>
+    </div>
+
+    <div class="tabcontent" id="tab-validation">
+      <div class="card">
+        <h2>Developer Diagnostics</h2>
+        <div class="grid4" id="overviewMetrics"></div>
+      </div>
+      <div class="card">
+        <h2>Calibration — Conviction Score</h2>
+        <div id="calibTable"></div>
+        <div class="status" id="brierStatus"></div>
+      </div>
+      <div class="card">
+        <h2>Error Analysis (dynamic thresholds)</h2>
+        <div id="errorTable"></div>
+      </div>
+      <div class="card">
+        <h2>Regime Reports</h2>
+        <div id="regimeTable"></div>
+      </div>
+    </div>
+
+    <div class="tabcontent" id="tab-docs">
+      <div class="card">
+        <h2>Engine C — How This System Works</h2>
+        <div class="why">
+          <p><strong>Engine A — Market Structure.</strong> Analyzes price action across 8 pillars (Stage, Zone, ZPath, RRC, Weekday, BFQ, WOM, RoC) to measure how "coiled" or "extended" the market structure currently is. Outputs a MasterP score (0-100+, can go negative) and a Regime classification (HighSptR/LowSptR, based on ATR-to-price volatility percentile). Frozen — no formula, weight, or threshold changes without your explicit sign-off.</p>
+          <p style="margin-top:12px"><strong>Engine B — Volatility Readiness.</strong> Builds a historical Evidence Library from Quietness/Direction patterns over the trailing 9 days, scores each pattern's Likelihood Ratio (blast vs miss, Laplace-smoothed), and combines active evidence into a Blast Readiness Index (BRI, 0-100) via log-likelihood summation. Frozen — no formula changes.</p>
+          <p style="margin-top:12px"><strong>Engine C — Decision Intelligence (this layer).</strong> Never alters Engine A or B's math. It only reads their outputs, compares them, and explains the relationship. This is the sole place where the two engines' signals are combined.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>What Each Metric Means</h2>
+        <div class="why">
+          <p><strong>Conviction Score (0-100).</strong> The final trading confidence signal. Calculated as the Bayesian Posterior Probability, pulled toward a neutral 50 in proportion to how unreliable the current setup is (low reliability = more pulled toward neutral, not a simple average of A and B).</p>
+          <p style="margin-top:10px"><strong>Blast Probability.</strong> The Bayesian Posterior Probability of a volatility blast (2×ATR move) within 10 trading days. Prior = the historical blast rate observed for this exact combination of Engine A and Engine B signal strength (from the Decision Matrix). Likelihood = Engine B's own evidence (exp of its log-likelihood sum). Posterior = properly combined via Bayesian odds — not an arbitrary blend.</p>
+          <p style="margin-top:10px"><strong>Agreement.</strong> How closely Engine A's signal strength and Engine B's signal strength currently match, based on dynamically computed tercile buckets (Low/Medium/High) of each engine's own historical score distribution — never hardcoded thresholds.</p>
+          <p style="margin-top:10px"><strong>Reliability.</strong> How much historical data backs today's specific combination of signals. Based on: how many similar historical days exist (sample size, bucketed dynamically), how much active evidence Engine B found, and how well A and B agree. Low reliability means today's setup is relatively untested historically.</p>
+          <p style="margin-top:10px"><strong>Suggested Position.</strong> Translated from Engine A's dynamic allocation logic, which ranks today's MasterP score against its own regime-specific historical range. "Stand Down" means today ranks too low within its regime's own history to justify a position; a percentage means today ranks at that percentile of the regime's historical range.</p>
+          <p style="margin-top:10px"><strong>Historical Similar Setups.</strong> The number of past days that landed in the exact same (Engine A bucket, Engine B bucket) cell of the Decision Matrix, and what fraction of those actually blasted within 10 days. This is the empirical prior feeding the Bayesian calculation above.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Consistency Validation</h2>
+        <div class="why">
+          <p>The dashboard automatically compares the Historical Blast Rate for today's setup against the final Blast Probability. A large gap between the two is <em>not</em> an error — it usually means the Bayesian update (fresh evidence from Engine B, or a low-reliability penalty) is meaningfully overriding the raw historical average. When the gap exceeds a configurable threshold, a review banner explains which component is driving the difference, so nothing is presented as a black box.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Frozen Components (v1.0 RC)</h2>
+        <div class="why">
+          <p>Engine A math, Engine B math, Bayesian fusion formula, Feature Store logic, and historical evidence generation are all frozen as of this release. Only bug fixes are permitted going forward, unless live trading data provides strong evidence justifying a mathematical change — and that decision is reserved for you.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ===== csv-import-clean.js =====
+// =============================================================================
+// SHARED CORE — CSV Import + Data Cleaning
+// =============================================================================
+// SOURCE VERIFICATION: Engine A (washAndProcessRows, index.html L300-309) and
+// Engine B (washCSV, engine_b L454-511) implement IDENTICAL validation rules,
+// just with different CSV parsers (PapaParse vs manual split) and different
+// object key casing (Open/High/Low/Close vs open/high/low/close).
+//
+// Rules confirmed identical in both sources:
+//   1. Reject rows with no parseable date
+//   2. Reject rows with any OHLC <= 0 or missing
+//   3. Reject rows where High < Low, or Close > High, or Close < Low
+//   4. Reject duplicate dates (keep first)
+//   5. Reject duplicate OHLC vs immediately preceding valid row
+//   6. Reject >20% single-day close-to-close move ("spike") vs prior valid close
+//   7. Restrict to trailing 3-year lookback window
+//   8. Require >= 115 clean rows remaining, else hard-fail
+//   9. TR formula: prev row exists -> max(H-L, |H-prevClose|, |L-prevClose|)
+//                  else (first row) -> H-L
+//
+// This module is CANONICAL — both Engine A's pipeline and Engine B's pipeline
+// call this instead of their own local wash functions. No math changed from
+// what both sources already agreed on.
+//
+// Output row shape (lowercase keys, matches Engine B convention since it's
+// the more explicit of the two — this is a naming choice only, not a math
+// change): { date, open, high, low, close, TR }
+// =============================================================================
+
+const MIN_CLEAN_ROWS = 115;
+const LOOKBACK_YEARS = 3;
+const SPIKE_PCT_THRESHOLD = 20;
+
+function cleanDateStr(s) {
+  if (!s) return null;
+  s = String(s).replace(/^\ufeff/g, '').replace(/['"]/g, '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  let m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (m) { const [, d, mo, y] = m; return y + '-' + mo.padStart(2, '0') + '-' + d.padStart(2, '0'); }
+  const dt = new Date(s);
+  if (!isNaN(dt)) return dt.toISOString().slice(0, 10);
+  return null;
+}
+
+function parseCleanNum(s) {
+  if (s === null || s === undefined || s === '') return null;
+  const n = parseFloat(String(s).replace(/[, ]/g, ''));
+  return isNaN(n) || n <= 0 ? null : n;
+}
+
+// rawRows: array of objects with case-insensitive keys date/open/high/low/close
+// (already header-mapped by the caller's CSV parser, e.g. PapaParse with header:true)
+function washRows(rawRows) {
+  const rejected = { noDate: 0, zeroOHLC: 0, badHL: 0, duplicate: 0, spike: 0 };
+  const seenDates = new Set();
+  let prevClose = null, prevOHLC = null;
+  let validRows = [];
+
+  for (const raw of rawRows) {
+    const keyMap = {};
+    Object.keys(raw).forEach(k => {
+      const wk = String(k).replace(/^\ufeff/g, '').trim().toLowerCase();
+      if (['date', 'open', 'high', 'low', 'close'].includes(wk)) keyMap[wk] = raw[k];
+    });
+
+    const dk = cleanDateStr(keyMap.date);
+    if (!dk) { rejected.noDate++; continue; }
+
+    const o = parseCleanNum(keyMap.open);
+    const h = parseCleanNum(keyMap.high);
+    const l = parseCleanNum(keyMap.low);
+    const c = parseCleanNum(keyMap.close);
+    if (!o || !h || !l || !c) { rejected.zeroOHLC++; continue; }
+    if (h < l || c > h || c < l) { rejected.badHL++; continue; }
+
+    if (seenDates.has(dk)) { rejected.duplicate++; continue; }
+    seenDates.add(dk);
+
+    const ohlcKey = `${o}_${h}_${l}_${c}`;
+    if (prevOHLC === ohlcKey) { rejected.duplicate++; continue; }
+    prevOHLC = ohlcKey;
+
+    if (prevClose !== null) {
+      const chgPct = Math.abs(c - prevClose) / prevClose * 100;
+      if (chgPct > SPIKE_PCT_THRESHOLD) { rejected.spike++; prevClose = c; continue; }
+    }
+    prevClose = c;
+
+    validRows.push({ date: dk, open: o, high: h, low: l, close: c });
+  }
+
+  // Lookback window
+  const cutoff = new Date();
+  cutoff.setFullYear(cutoff.getFullYear() - LOOKBACK_YEARS);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  const beforeLB = validRows.length;
+  validRows = validRows.filter(r => r.date >= cutoffStr);
+  const removedLookback = beforeLB - validRows.length;
+
+  // Sort chronologically (defensive — both sources assume ascending input,
+  // Engine B explicitly sorts; we do too, for safety, since sort is
+  // idempotent on already-sorted data and changes no math)
+  validRows.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  // TR (True Range) — needed before ATR; identical formula in both sources
+  for (let i = 0; i < validRows.length; i++) {
+    const curr = validRows[i], prev = i > 0 ? validRows[i - 1] : null;
+    curr.TR = prev
+      ? Math.max(curr.high - curr.low, Math.abs(curr.high - prev.close), Math.abs(curr.low - prev.close))
+      : curr.high - curr.low;
+  }
+
+  const report = {
+    raw: rawRows.length,
+    clean: validRows.length,
+    dropped: { ...rejected, lookback: removedLookback },
+    dateFirst: validRows.length ? validRows[0].date : null,
+    dateLast: validRows.length ? validRows[validRows.length - 1].date : null,
+  };
+
+  if (validRows.length < MIN_CLEAN_ROWS) {
+    const err = new Error(`After washing, only ${validRows.length} rows remain (need >= ${MIN_CLEAN_ROWS}).`);
+    err.report = report;
+    throw err;
+  }
+
+  return { rows: validRows, report };
+}
+
+
+
+// ===== atr-shared.js =====
+// =============================================================================
+// SHARED CORE — Canonical ATR14
+// =============================================================================
+// SOURCE VERIFICATION:
+//   Engine A (index.html L456, L600, L441): atr14 = sum(TR over rows[i-13..i]) / 14
+//   Engine B generateCycles (L608, the BLAST-DETECTION atr, explicitly commented
+//     "LOCKED — exact original blast-detection ATR14 ... identical to v5.1"):
+//     a14 = sum(TR over rows[p-14..p-1]) / 14   -- same 14-bar /14 simple mean,
+//     just indexed from the anchor convention (p-1 = anchor row).
+//
+//   NOTE: Engine B ALSO has a second, different atr14() helper (L376-381) used
+//   only by its Sense Engine (Quietness/Direction daily labels) that divides
+//   by 13, not 14, and has a fallback of (high-low||1). That helper is NOT
+//   used for cycle/blast detection in Engine B — it's a v6-native addition
+//   for daily labeling only. Per Piju's direction, this canonical ATR module
+//   now becomes the single source for ALL ATR needs, including what the
+//   Sense Engine used to compute locally. This does change the Sense Engine's
+//   exact daily Quietness/Direction labels slightly (13-bar mean -> 14-bar
+//   mean) -- flagged here explicitly since it's the one deliberate behavior
+//   change authorized by the "one shared ATR Engine" instruction.
+//
+// Canonical formula: simple mean of True Range over the trailing 14 bars
+// ENDING AT index i (inclusive), i.e. rows[i-13 .. i].
+// =============================================================================
+
+// rows: array of { TR, ... } already produced by csv-import-clean.js washRows()
+// i: index of the anchor/reference row (0-based, into `rows`)
+// Returns null if insufficient history (i < 13) rather than silently guessing.
+function atr14(rows, i) {
+  if (i < 13 || i >= rows.length) return null;
+  let sum = 0;
+  for (let j = i - 13; j <= i; j++) sum += rows[j].TR;
+  return sum / 14;
+}
+
+// Convenience: ATR as a fraction of the reference row's close ("ATR/Spot").
+function atrSpot(rows, i) {
+  const a = atr14(rows, i);
+  if (a === null) return null;
+  const close = rows[i].close;
+  return close > 0 ? a / close : null;
+}
+
+
+
+const sharedAtr14 = atr14;
+
+// ===== regime-legacy-a.js =====
+// =============================================================================
+// LEGACY REGIME A — extracted verbatim from Engine A (index.html)
+// RESEARCH HARNESS USE ONLY. Not wired into any production pipeline.
+// =============================================================================
+
+// Global P50 threshold of atrSpot across the WHOLE dataset (matches Engine A,
+// which recomputes this every time data loads — index.html L440).
+// NOTE: original loops k=14..rawRows.length-1, i.e. anchor ai=k-1 ranges
+// 13..rawRows.length-2 — the LAST row is deliberately excluded from the
+// percentile sample. Must match exactly (off-by-one here shifts the
+// threshold and can flip regime near the boundary).
+function computeAtrSpotP50(rows) {
+  const vals = [];
+  for (let i = 13; i < rows.length - 1; i++) {
+    const v = atrSpot(rows, i);
+    if (v !== null) vals.push(v);
+  }
+  vals.sort((a, b) => a - b);
+  return vals.length ? (vals[Math.floor(vals.length * 0.5)] ?? 0.007) : 0.007;
+}
+
+function rawRegimeA(rows, i, atrSpotP50) {
+  const v = atrSpot(rows, i);
+  if (v === null) return null;
+  return v >= atrSpotP50 ? 'HighSptR' : 'LowSptR';
+}
+
+// Confirmed regime: last-3-consecutive-raw-readings unanimity rule
+// (Engine A's getConfirmedRegime, index.html L318).
+function buildRegimeSeriesA(rows) {
+  const atrSpotP50 = computeAtrSpotP50(rows);
+  const raw = new Array(rows.length).fill(null);
+  const confirmed = new Array(rows.length).fill(null);
+  for (let i = 0; i < rows.length; i++) {
+    raw[i] = rawRegimeA(rows, i, atrSpotP50);
+    if (raw[i] === null) { confirmed[i] = null; continue; }
+    if (i < 3 || raw[i - 1] === null || raw[i - 2] === null) {
+      confirmed[i] = raw[i]; // not enough history for the 3-bar check yet
+      continue;
+    }
+    if (raw[i] === raw[i - 1] && raw[i - 1] === raw[i - 2]) {
+      confirmed[i] = raw[i];
+    } else {
+      confirmed[i] = confirmed[i - 1]; // hold previous confirmed state
+    }
+  }
+  return { raw, confirmed, atrSpotP50 };
+}
+
+
+
+// ===== regime-legacy-b.js =====
+// =============================================================================
+// LEGACY REGIME B — extracted verbatim from Engine B (engine_b_v6.html)
+// RESEARCH HARNESS USE ONLY. Not wired into any production pipeline.
+// =============================================================================
+const REGIME_CONFIRM_STREAK = 3; // confirmed from source, engine_b L361
+
+function rawRegimeB(rows, i) {
+  if (i < 50) return 'HighSptR'; // warmup fallback, matches source exactly
+  let hi = -Infinity, lo = Infinity;
+  for (let j = i - 50; j < i; j++) { hi = Math.max(hi, rows[j].high); lo = Math.min(lo, rows[j].low); }
+  return rows[i].close > (hi + lo) / 2 ? 'HighSptR' : 'LowSptR';
+}
+
+// Streak-based confirmation (Engine B's buildConfirmedRegimeSeries, L393-415).
+function buildRegimeSeriesB(rows) {
+  const n = rows.length;
+  const raw = new Array(n);
+  const confirmed = new Array(n);
+  let curConfirmed = null, streakLabel = null, streakCount = 0;
+  for (let i = 0; i < n; i++) {
+    const r = rawRegimeB(rows, i);
+    raw[i] = r;
+    if (curConfirmed === null) {
+      curConfirmed = r; streakLabel = r; streakCount = 1;
+    } else if (r === curConfirmed) {
+      streakLabel = r; streakCount = 1;
+    } else {
+      if (r === streakLabel) streakCount++; else { streakLabel = r; streakCount = 1; }
+      if (streakCount >= REGIME_CONFIRM_STREAK) { curConfirmed = r; streakCount = 0; streakLabel = null; }
+    }
+    confirmed[i] = curConfirmed;
+  }
+  return { raw, confirmed };
+}
+
+
+
+// ===== regime-canonical.js =====
+// =============================================================================
+// CANONICAL REGIME ENGINE — DECISION LOCKED (Piju, research-based)
+// =============================================================================
+// Regime A (volatility-percentile) adopted as canonical: balanced distribution,
+// lower flip frequency, longer stable runs, better blast-rate separation.
+// Regime B kept ONLY as a diagnostic/research signal — never primary.
+// =============================================================================
+
+// Primary API — this is what Engine A adapter, Engine B adapter, and the
+// Feature Store call for the actual regime used in scoring/evidence.
+function buildCanonicalRegime(rows) {
+  return buildRegimeSeriesA(rows); // { raw, confirmed, atrSpotP50 }
+}
+
+// Diagnostic-only: runs Regime B alongside and flags every day the two
+// disagree. Exposed as a feature (RegimeConflict) but never drives scoring.
+function buildRegimeWithConflictDiagnostics(rows) {
+  const canonical = buildRegimeSeriesA(rows);
+  const diagnostic = buildRegimeSeriesB(rows);
+  const n = rows.length;
+  const RegimeConflict = new Array(n).fill(null);
+  for (let i = 0; i < n; i++) {
+    const a = canonical.confirmed[i], b = diagnostic.confirmed[i];
+    RegimeConflict[i] = (a === null || b === null) ? null : (a !== b);
+  }
+  return {
+    Regime: canonical.confirmed,       // canonical, primary
+    RegimeRaw: canonical.raw,
+    atrSpotP50: canonical.atrSpotP50,   // threshold used by canonical regime
+    RegimeB_diagnostic: diagnostic.confirmed, // research/diagnostic only
+    RegimeConflict,                     // true/false/null per row
+  };
+}
+
+
+
+// ===== feature-store.js =====
+// =============================================================================
+// FEATURE STORE — Module 2
+// =============================================================================
+// One master dataset built from the shared core. Consumed by Engine A adapter
+// and Engine B adapter — each reads what it needs, neither recomputes CSV
+// import/cleaning/ATR/Regime itself.
+//
+// Grain: dual, per earlier locked decision — Engine A and Engine B use
+// incompatible cycle definitions (rolling-anchor vs non-overlapping-jump),
+// so both are stored, tagged separately. Engine A/B adapters build their own
+// cycle arrays on top of this store; this module only guarantees the shared
+// per-day fields every downstream cycle needs.
+// =============================================================================
+
+// Input: raw CSV rows (array of objects, case-insensitive Date/Open/High/Low/Close keys)
+// Output: { rows, report } where rows[i] is the canonical per-day feature record.
+function buildFeatureStore(rawRows) {
+  const { rows: cleanRows, report } = washRows(rawRows);
+  const regime = buildRegimeWithConflictDiagnostics(cleanRows);
+
+  const features = cleanRows.map((r, i) => ({
+    idx: i,
+    date: r.date,
+    open: r.open, high: r.high, low: r.low, close: r.close,
+    TR: r.TR,
+    ATR14: atr14(cleanRows, i),           // canonical shared ATR, null if i<13
+    ATRSpot: atrSpot(cleanRows, i),       // canonical ATR/Close, null if i<13
+    Regime: regime.Regime[i],             // canonical (Regime A), primary
+    RegimeRaw: regime.RegimeRaw[i],
+    RegimeB_diagnostic: regime.RegimeB_diagnostic[i], // research only, never primary
+    RegimeConflict: regime.RegimeConflict[i],         // true/false/null
+  }));
+
+  return { rows: features, report, atrSpotP50: regime.atrSpotP50 };
+}
+
+
+
+// ===== engine-a-adapter.js =====
+// =============================================================================
+// ENGINE A ADAPTER — Module 3
+// =============================================================================
+// Pure/headless port of Engine A's processSpatialEngine + ProbabilityEngine
+// (index.html L235-616). All pillar math (Stage/Zone/ZPath/RRC/BFQ/WOM/RoC,
+// Precision-Weighted MasterP, dynamic allocation) is VERBATIM — no formula,
+// weight, or threshold changes.
+//
+// ONLY CHANGE FROM ORIGINAL: regime is no longer computed locally via
+// getRegimeFromSptR/getConfirmedRegime. It is read from the Feature Store's
+// canonical Regime (Regime A, per Piju's locked decision) at each row's index.
+// ATR14 also now calls the shared atr-shared.js function instead of an
+// inline duplicate — same formula, single source of truth.
+//
+// DOM/UI code removed (no document.getElementById, no localStorage, no
+// export/render functions) — this adapter returns data, a future dashboard
+// layer renders it. rawRows sorting/washing is NOT redone here — it must
+// already come from the Feature Store (buildFeatureStore), which guarantees
+// alignment between array index and canonical Regime/ATR values.
+// =============================================================================
+
+// ---- constants, verbatim from Engine A ----
+const NPS_CONFIG = { WEIGHTS: { FAST: 0.50, MID: 1.00, SLOW: 0.25, MISS: -0.5 }, STAND_DOWN_THRESHOLD: 0.25 };
+const REGIME_KEYS = ["HighSptR", "LowSptR"];
+const STAGE_KEYS = [4, 3, 2, 1];
+const ZONE_KEYS = ["Upper Zone", "Middle Zone", "Lower Zone"];
+const RRC_KEYS = ["Deep", "Neutral", "Expansion"];
+const WEEKDAY_KEYS = [1, 2, 3, 4, 5];
+const BFQ_KEYS = ["Normal", "Exhausted"];
+const WOM_KEYS = [1, 2, 3, 4, 5];
+const ZPATH_KEYS = [0, 1, 2];
+const ROC_KEYS = [0, 1, 2];
+
+function getWeekOfMonth(d) { return Math.ceil(new Date(d).getUTCDate() / 7); }
+
+// ---- helper functions, verbatim from Engine A ----
+function classifyRRCState(range3, atr, rrcP33, rrcP66) {
+  const r = atr > 0 ? range3 / atr : 1;
+  return r <= rrcP33 ? "Deep" : r <= rrcP66 ? "Neutral" : "Expansion";
+}
+
+function computeZPath(rawRows, ai, zph20, zpl20) {
+  if (ai < 20) return 0;
+  const zR = zph20 - zpl20;
+  function dzs(c) { if (zR <= 0) return 0; const p = (c - zpl20) / zR; return p >= 0.66 ? 1 : p <= 0.33 ? -1 : 0; }
+  const sc = []; for (let d = 19; d >= 0; d--) sc.push(dzs(rawRows[ai - d].Close));
+  const B1 = (sc[0] + sc[1] + sc[2] + sc[3] + sc[4]) / 5;
+  const B2 = (sc[5] + sc[6] + sc[7] + sc[8] + sc[9]) / 5;
+  const B3 = (sc[10] + sc[11] + sc[12] + sc[13] + sc[14]) / 5;
+  const B4 = (sc[15] + sc[16] + sc[17] + sc[18] + sc[19]) / 5;
+  if (B4 >= 0.3 && B4 >= B3 && B3 >= B2 - 0.1 && B4 > B1) return 2;
+  if (B4 <= -0.3 && B4 <= B3 && B3 <= B2 + 0.1 && B4 < B1) return 1;
+  return 0;
+}
+
+function computeBFQState(rawRows, anchorIdx) {
+  if (anchorIdx < 20) return "Normal";
+  const atr = rawRows.slice(anchorIdx - 13, anchorIdx + 1).reduce((a, d) => a + d.TR, 0) / 14;
+  let bc = 0;
+  for (let s = 0; s < 7; s++) {
+    const e = anchorIdx - s * 3, st = e - 2;
+    if (st < 0) break;
+    const hi = Math.max(rawRows[st].High, rawRows[st + 1].High, rawRows[e].High);
+    const lo = Math.min(rawRows[st].Low, rawRows[st + 1].Low, rawRows[e].Low);
+    if (atr > 0 && (hi - lo) > 2 * atr) bc++;
+  }
+  return bc <= 2 ? "Normal" : "Exhausted";
+}
+
+function computeRoCGrid(rawRows, anchorIdx, atrVal) {
+  if (anchorIdx < 16) return 0;
+  const internalScores = [];
+  const threshold = (atrVal / rawRows[anchorIdx].Close) * 100 * 0.5;
+  for (let d = 13; d >= 0; d--) {
+    const idx = anchorIdx - d;
+    const cNow = rawRows[idx].Close;
+    const cPrev3 = rawRows[idx - 3] ? rawRows[idx - 3].Close : null;
+    if (!cPrev3 || cPrev3 <= 0) { internalScores.push(0); continue; }
+    const roc3 = ((cNow - cPrev3) / cPrev3) * 100;
+    if (roc3 >= threshold) internalScores.push(1);
+    else if (roc3 <= -threshold) internalScores.push(-1);
+    else internalScores.push(0);
+  }
+  const B1 = (internalScores[0] + internalScores[1] + internalScores[2] + internalScores[3]) / 4;
+  const B2 = (internalScores[4] + internalScores[5] + internalScores[6] + internalScores[7] + internalScores[8] + internalScores[9]) / 6;
+  const B3 = (internalScores[10] + internalScores[11] + internalScores[12] + internalScores[13]) / 4;
+  if (B3 >= 0.25 && B3 >= B2 && B2 >= B1) return 2;
+  if (B3 <= -0.25 || (B1 > 0.1 && B3 < B1 - 0.5)) return 1;
+  return 0;
+}
+
+function velocityWeight(bd, hit, velFastCut, velMidCut) {
+  if (!hit || bd === 0) return NPS_CONFIG.WEIGHTS.MISS;
+  if (bd <= velFastCut) return NPS_CONFIG.WEIGHTS.FAST;
+  if (bd <= velMidCut) return NPS_CONFIG.WEIGHTS.MID;
+  return NPS_CONFIG.WEIGHTS.SLOW;
+}
+
+function bucketVelocityScore(outcomes, velFastCut, velMidCut) {
+  if (!outcomes.length) return { score: 0, pillarScore: 0, fast: 0, mid: 0, slow: 0, miss: 0, total: 0, raw: 0 };
+  let fast = 0, mid = 0, slow = 0, miss = 0, rawScore = 0;
+  outcomes.forEach(o => {
+    let w = velocityWeight(o.blastDay, o.hit, velFastCut, velMidCut);
+    rawScore += w;
+    if (!o.hit || o.blastDay === 0) miss++;
+    else if (o.blastDay <= velFastCut) fast++;
+    else if (o.blastDay <= velMidCut) mid++;
+    else slow++;
+  });
+  const score = rawScore / outcomes.length;
+  return { score, pillarScore: Math.min(100, score * 100), fast, mid, slow, miss, total: outcomes.length, raw: rawScore };
+}
+
+function getPrecisionWeight(outcomes, velFastCut, velMidCut) {
+  const MIN_SAMPLES = 5, VARIANCE_FLOOR = 0.02;
+  if (!outcomes || outcomes.length < MIN_SAMPLES) return 0;
+  const n = outcomes.length;
+  const scores = outcomes.map(o => velocityWeight(o.blastDay, o.hit, velFastCut, velMidCut));
+  const mean = scores.reduce((sum, s) => sum + s, 0) / n;
+  const variance = scores.reduce((sum, s) => sum + Math.pow(s - mean, 2), 0) / n;
+  return n / Math.max(variance, VARIANCE_FLOOR);
+}
+
+function initConditionalStats() {
+  const analyticsStats = { conditionalStage: {}, conditionalZone: {}, conditionalRRC: {}, conditionalWeekday: {}, conditionalBFQ: {}, conditionalWOM: {}, conditionalZPath: {}, conditionalRoC: {}, regime: { "HighSptR": { outcomes: [] }, "LowSptR": { outcomes: [] } } };
+  REGIME_KEYS.forEach(r => {
+    analyticsStats.conditionalStage[r] = {}; analyticsStats.conditionalZone[r] = {}; analyticsStats.conditionalRRC[r] = {};
+    analyticsStats.conditionalWeekday[r] = {}; analyticsStats.conditionalBFQ[r] = {}; analyticsStats.conditionalWOM[r] = {}; analyticsStats.conditionalZPath[r] = {}; analyticsStats.conditionalRoC[r] = {};
+    STAGE_KEYS.forEach(s => analyticsStats.conditionalStage[r][s] = { outcomes: [] });
+    ZONE_KEYS.forEach(z => analyticsStats.conditionalZone[r][z] = { outcomes: [] });
+    RRC_KEYS.forEach(rrc => analyticsStats.conditionalRRC[r][rrc] = { outcomes: [] });
+    WEEKDAY_KEYS.forEach(wd => analyticsStats.conditionalWeekday[r][wd] = { outcomes: [] });
+    BFQ_KEYS.forEach(bfq => analyticsStats.conditionalBFQ[r][bfq] = { outcomes: [] });
+    WOM_KEYS.forEach(wom => analyticsStats.conditionalWOM[r][wom] = { outcomes: [] });
+    ZPATH_KEYS.forEach(zp => analyticsStats.conditionalZPath[r][zp] = { outcomes: [] });
+    ROC_KEYS.forEach(roc => analyticsStats.conditionalRoC[r][String(roc)] = { outcomes: [] });
+  });
+  return analyticsStats;
+}
+
+function ProbabilityEngine(stage, zone, regimeState, rrcState, weekday, bfqState, womState, zpathState, rocState, analyticsStats, velFastCut, velMidCut) {
+  function pillarShrink(outcomes) {
+    if (!outcomes.length) return { pillarScore: 0, rawScore: 0, lambda: 0, vs: bucketVelocityScore([], velFastCut, velMidCut), n: 0 };
+    const vs = bucketVelocityScore(outcomes, velFastCut, velMidCut);
+    return { pillarScore: Math.min(100, vs.pillarScore), rawScore: vs.pillarScore, lambda: 0, vs, n: outcomes.length };
+  }
+  const csOut = ((analyticsStats.conditionalStage[regimeState] || {})[stage] || { outcomes: [] }).outcomes;
+  const stagePillar = pillarShrink(csOut); const stageSamples = csOut.length; const stageVS = stagePillar.vs;
+  const czOut = ((analyticsStats.conditionalZone[regimeState] || {})[zone] || { outcomes: [] }).outcomes;
+  const zonePillar = pillarShrink(czOut); const zoneSamples = czOut.length; const zoneVS = zonePillar.vs;
+  const rrcKey = rrcState || "Neutral"; const crOut = ((analyticsStats.conditionalRRC[regimeState] || {})[rrcKey] || { outcomes: [] }).outcomes;
+  const rrcPillar = pillarShrink(crOut); const rrcSamples = crOut.length; const rrcVS = rrcPillar.vs;
+  const wdKey = (weekday !== null && weekday !== undefined) ? weekday : 0;
+  const cwOut = (wdKey >= 1 && wdKey <= 5 && (analyticsStats.conditionalWeekday[regimeState] || {})[wdKey]) ? analyticsStats.conditionalWeekday[regimeState][wdKey].outcomes : [];
+  const weekdayPillar = pillarShrink(cwOut); const weekdaySamples = cwOut.length; const weekdayVS = weekdayPillar.vs;
+  const bfqKey = bfqState || "Normal"; const cbOut = ((analyticsStats.conditionalBFQ[regimeState] || {})[bfqKey] || { outcomes: [] }).outcomes;
+  const bfqPillar = pillarShrink(cbOut); const bfqSamples = cbOut.length; const bfqVS = bfqPillar.vs;
+  const womKey = womState || 1; const cwomOut = ((analyticsStats.conditionalWOM[regimeState] || {})[womKey] || { outcomes: [] }).outcomes;
+  const womPillar = pillarShrink(cwomOut); const womSamples = cwomOut.length; const womVS = womPillar.vs;
+  const zpKey = zpathState !== undefined ? zpathState : 0; const czpOut = ((analyticsStats.conditionalZPath[regimeState] || {})[zpKey] || { outcomes: [] }).outcomes;
+  const zpathPillar = pillarShrink(czpOut); const zpathSamples = czpOut.length; const zpathVS = zpathPillar.vs;
+  const rocKey = String((rocState !== undefined && rocState !== null) ? rocState : 0); const crocOut = ((analyticsStats.conditionalRoC[regimeState] || {})[rocKey] || { outcomes: [] }).outcomes;
+  const rocPillar = pillarShrink(crocOut); const rocSamples = crocOut.length; const rocVS = rocPillar.vs;
+
+  const w_stage = getPrecisionWeight(csOut, velFastCut, velMidCut);
+  const w_zone = getPrecisionWeight(czOut, velFastCut, velMidCut);
+  const w_zpath = getPrecisionWeight(czpOut, velFastCut, velMidCut);
+  const w_rrc = getPrecisionWeight(crOut, velFastCut, velMidCut);
+  const w_bfq = getPrecisionWeight(cbOut, velFastCut, velMidCut);
+  const w_weekday = getPrecisionWeight(cwOut, velFastCut, velMidCut);
+  const w_wom = getPrecisionWeight(cwomOut, velFastCut, velMidCut);
+  const w_roc = getPrecisionWeight(crocOut, velFastCut, velMidCut);
+  const totalWeight = w_stage + w_zone + w_zpath + w_rrc + w_bfq + w_weekday + w_wom + w_roc;
+
+  let masterP = 50;
+  if (totalWeight > 0) {
+    masterP = ((stagePillar.pillarScore * w_stage) + (zonePillar.pillarScore * w_zone) + (zpathPillar.pillarScore * w_zpath) +
+      (rrcPillar.pillarScore * w_rrc) + (bfqPillar.pillarScore * w_bfq) + (weekdayPillar.pillarScore * w_weekday) +
+      (womPillar.pillarScore * w_wom) + (rocPillar.pillarScore * w_roc)) / totalWeight;
+  }
+  const totalN = [csOut, czOut, czpOut, crOut, cwOut, cbOut, cwomOut, crocOut].reduce((sum, arr) => sum + (arr ? arr.length : 0), 0);
+  const regOutcomes = (analyticsStats.regime[regimeState] || { outcomes: [] }).outcomes;
+  const regimeSamples = regOutcomes.length;
+
+  return {
+    stageScore: stagePillar.pillarScore, zoneScore: zonePillar.pillarScore, rrcScore: rrcPillar.pillarScore, weekdayScore: weekdayPillar.pillarScore,
+    bfqScore: bfqPillar.pillarScore, womScore: womPillar.pillarScore, zpathScore: zpathPillar.pillarScore, rocScore: rocPillar.pillarScore, masterP,
+    stageVS, zoneVS, rrcVS, weekdayVS, bfqVS, womVS, zpathVS, rocVS,
+    stageSamples, zoneSamples, rrcSamples, weekdaySamples, bfqSamples, womSamples, zpathSamples, rocSamples, regimeSamples,
+    totalN,
+  };
+}
+
+function getDynamicAllocation(score, currentRegime, historicalScoreBounds) {
+  const rKey = (currentRegime === "HighSptR" || currentRegime === "LowSptR") ? currentRegime : "LowSptR";
+  const mn = historicalScoreBounds[rKey].min, mx = historicalScoreBounds[rKey].max, range = mx - mn;
+  if (range <= 0) return { mult: "STAND DOWN", multiplier: 0, relPct: 0, note: `Degenerate score range for ${rKey}.` };
+  const relPct = Math.max(0, Math.min(1, (score - mn) / range));
+  let threshold = NPS_CONFIG.STAND_DOWN_THRESHOLD;
+  if (rKey === "HighSptR") threshold = 0.15;
+  if (rKey === "LowSptR") threshold = 0.35;
+  if (relPct < threshold) return { mult: "STAND DOWN", multiplier: 0, relPct, note: `Relative score ${(relPct * 100).toFixed(1)}% — below adaptive ${rKey} floor.` };
+  const multiplier = parseFloat(relPct.toFixed(2));
+  return { mult: `Max_Limit * ${multiplier.toFixed(2)}`, multiplier, relPct, note: `Score ranks at ${(relPct * 100).toFixed(1)}% of local historical ${rKey} range.` };
+}
+
+// =============================================================================
+// MAIN ADAPTER ENTRY POINT
+// =============================================================================
+// featureStoreRows: output of buildFeatureStore(rawRows).rows
+//   Each row: { idx, date, open, high, low, close, TR, ATR14, ATRSpot,
+//               Regime (canonical confirmed), RegimeRaw, RegimeB_diagnostic, RegimeConflict }
+function runEngineA(featureStoreRows) {
+  // Convert to Engine A's legacy field-casing so verbatim math above works unchanged.
+  const rawRows = featureStoreRows.map(r => ({
+    Date: r.date, computedDateStr: r.date,
+    Open: r.open, High: r.high, Low: r.low, Close: r.close,
+    TR: r.TR,
+    _regimeRaw: r.RegimeRaw, _regime: r.Regime, // canonical, from Feature Store
+  }));
+
+  if (rawRows.length < 115) throw new Error(`Engine A adapter needs >=115 rows, got ${rawRows.length}`);
+
+  // ---- velocity cut / rrc percentile derivation (Engine A's own stats, verbatim,
+  // now using shared atr14() instead of a local duplicate formula) ----
+  let allBD = [];
+  { let p = 100; while (p < rawRows.length - 10) {
+      const a14 = sharedAtr14(rawRows, p - 1) ?? (rawRows.slice(p - 14, p).reduce((s, d) => s + d.TR, 0) / 14);
+      const ac = rawRows[p - 1].Close; let bd = 0, hit = 0;
+      for (let di = 0; p + di < rawRows.length; di++) {
+        const fr = rawRows[p + di], mm = Math.max(Math.abs(fr.High - ac), Math.abs(ac - fr.Low));
+        if (a14 > 0 && mm / a14 >= 2) { bd = di + 1; hit = 1; break; }
+      }
+      if (hit) { allBD.push(bd); p += bd; } else p++;
+    }
+  }
+  allBD.sort((a, b) => a - b);
+  let velFastCut = allBD[Math.floor(allBD.length * 0.33)] ?? 3;
+  let velMidCut = allBD[Math.floor(allBD.length * 0.66)] ?? 6;
+  if (velFastCut >= velMidCut) { velFastCut = 3; velMidCut = 6; }
+
+  let allRRC = [];
+  for (let k = 105; k < rawRows.length - 10; k++) {
+    const ai = k - 1;
+    const r3h = Math.max(...rawRows.slice(ai - 2, ai + 1).map(d => d.High));
+    const r3l = Math.min(...rawRows.slice(ai - 2, ai + 1).map(d => d.Low));
+    const a14 = sharedAtr14(rawRows, ai) ?? 1;
+    allRRC.push(a14 > 0 ? (r3h - r3l) / a14 : 1);
+  }
+  allRRC.sort((a, b) => a - b);
+  let rrcP33 = allRRC[Math.floor(allRRC.length * 0.33)] ?? 0.4;
+  let rrcP66 = allRRC[Math.floor(allRRC.length * 0.66)] ?? 0.8;
+  if (rrcP33 >= rrcP66) { rrcP33 = 0.4; rrcP66 = 0.8; }
+
+  // ---- MAIN LOOP: builds `processed` (skip-ahead, same as original) ----
+  let processed = [], dateLookupMap = {};
+  let i = 100;
+  while (i < rawRows.length) {
+    const ai = i - 1;
+    const h3 = Math.max(...rawRows.slice(ai - 2, ai + 1).map(d => d.High)), l3 = Math.min(...rawRows.slice(ai - 2, ai + 1).map(d => d.Low));
+    const ph5 = Math.max(...rawRows.slice(ai - 7, ai - 2).map(d => d.High)), pl5 = Math.min(...rawRows.slice(ai - 7, ai - 2).map(d => d.Low));
+    const h5 = Math.max(...rawRows.slice(ai - 4, ai + 1).map(d => d.High)), l5 = Math.min(...rawRows.slice(ai - 4, ai + 1).map(d => d.Low));
+    const ph10 = Math.max(...rawRows.slice(ai - 14, ai - 4).map(d => d.High)), pl10 = Math.min(...rawRows.slice(ai - 14, ai - 4).map(d => d.Low));
+    const h10 = Math.max(...rawRows.slice(ai - 9, ai + 1).map(d => d.High)), l10 = Math.min(...rawRows.slice(ai - 9, ai + 1).map(d => d.Low));
+    const ph20 = Math.max(...rawRows.slice(ai - 29, ai - 9).map(d => d.High)), pl20 = Math.min(...rawRows.slice(ai - 29, ai - 9).map(d => d.Low));
+    const zph20 = Math.max(...rawRows.slice(ai - 20, ai).map(d => d.High)), zpl20 = Math.min(...rawRows.slice(ai - 20, ai).map(d => d.Low));
+    const atr = sharedAtr14(rawRows, ai) ?? 1;
+    const tm = ((h3 - l3) < (ph5 - pl5) ? 1 : 0) + ((h5 - l5) < (ph10 - pl10) ? 1 : 0) + ((h10 - l10) < (ph20 - pl20) ? 1 : 0);
+    const stage = tm === 3 ? 4 : tm === 2 ? 3 : tm === 1 ? 2 : 1;
+    const ac = rawRows[ai].Close;
+    const rawRegime = rawRows[ai]._regimeRaw, regimeState = rawRows[ai]._regime; // FROM FEATURE STORE, not recomputed
+    const pos20 = (zph20 - zpl20) > 0 ? (ac - zpl20) / (zph20 - zpl20) : 0.5;
+    const zone = pos20 <= 0.33 ? "Lower Zone" : pos20 >= 0.66 ? "Upper Zone" : "Middle Zone";
+    const rrcState = classifyRRCState(h3 - l3, atr, rrcP33, rrcP66);
+    const zpathState = computeZPath(rawRows, ai, zph20, zpl20);
+    const rocState = computeRoCGrid(rawRows, ai, atr);
+    const futureSlice = rawRows.slice(i, i + 10); let expHit = 0, blastDay = 0; const hasFuture = futureSlice.length === 10;
+    if (hasFuture) { for (let di = 0; di < futureSlice.length; di++) { const fr = futureSlice[di], mm = Math.max(Math.abs(fr.High - ac), Math.abs(ac - fr.Low)); if (atr > 0 && mm / atr >= 2 && blastDay === 0) { blastDay = di + 1; expHit = 1; } } }
+    const dKey = rawRows[i].computedDateStr;
+    const row = { Date: dKey, Close: ac, Stage: stage, Zone: zone, RawRegime: rawRegime, RegimeState: regimeState, RRCState: rrcState, BFQState: computeBFQState(rawRows, ai), ZPathState: zpathState, RoCState: rocState, ExpansionHit: expHit, BlastDay: blastDay, VelWeight: hasFuture ? velocityWeight(blastDay, expHit, velFastCut, velMidCut) : null, HasFutureData: hasFuture };
+    processed.push(row); dateLookupMap[dKey] = row;
+    const adv = hasFuture && expHit && blastDay > 0 ? blastDay : hasFuture ? 10 : 1;
+    for (let skip = 1; skip < adv; skip++) {
+      const si = i + skip; if (si >= rawRows.length) break;
+      const sk = rawRows[si].computedDateStr; if (dateLookupMap[sk]) continue;
+      const sai = si - 1;
+      const sh3 = Math.max(...rawRows.slice(sai - 2, sai + 1).map(d => d.High)), sl3 = Math.min(...rawRows.slice(sai - 2, sai + 1).map(d => d.Low));
+      const szph20 = Math.max(...rawRows.slice(sai - 20, sai).map(d => d.High)), szpl20 = Math.min(...rawRows.slice(sai - 20, sai).map(d => d.Low));
+      const sph5 = Math.max(...rawRows.slice(sai - 7, sai - 2).map(d => d.High)), spl5 = Math.min(...rawRows.slice(sai - 7, sai - 2).map(d => d.Low));
+      const sh5 = Math.max(...rawRows.slice(sai - 4, sai + 1).map(d => d.High)), sl5 = Math.min(...rawRows.slice(sai - 4, sai + 1).map(d => d.Low));
+      const sph10 = Math.max(...rawRows.slice(sai - 14, sai - 4).map(d => d.High)), spl10 = Math.min(...rawRows.slice(sai - 14, sai - 4).map(d => d.Low));
+      const sh10 = Math.max(...rawRows.slice(sai - 9, sai + 1).map(d => d.High)), sl10 = Math.min(...rawRows.slice(sai - 9, sai + 1).map(d => d.Low));
+      const sph20 = Math.max(...rawRows.slice(sai - 29, sai - 9).map(d => d.High)), spl20 = Math.min(...rawRows.slice(sai - 29, sai - 9).map(d => d.Low));
+      const stm = ((sh3 - sl3) < (sph5 - spl5) ? 1 : 0) + ((sh5 - sl5) < (sph10 - spl10) ? 1 : 0) + ((sh10 - sl10) < (sph20 - spl20) ? 1 : 0);
+      const sS = stm === 3 ? 4 : stm === 2 ? 3 : stm === 1 ? 2 : 1;
+      const sAC = rawRows[sai].Close, sPos = (szph20 - szpl20) > 0 ? (sAC - szpl20) / (szph20 - szpl20) : 0.5;
+      const sZ = sPos <= 0.33 ? "Lower Zone" : sPos >= 0.66 ? "Upper Zone" : "Middle Zone";
+      const satr = sharedAtr14(rawRows, sai) ?? 1;
+      const sRRC = classifyRRCState(sh3 - sl3, satr, rrcP33, rrcP66), sZPath = computeZPath(rawRows, sai, szph20, szpl20);
+      const sRoCState = computeRoCGrid(rawRows, sai, satr);
+      const sRawRegime = rawRows[sai]._regimeRaw, sRegime = rawRows[sai]._regime; // FROM FEATURE STORE
+      const sRow = { Date: sk, Close: sAC, Stage: sS, Zone: sZ, RawRegime: sRawRegime, RegimeState: sRegime, RRCState: sRRC, BFQState: computeBFQState(rawRows, sai), ZPathState: sZPath, RoCState: sRoCState, ExpansionHit: 0, BlastDay: 0, VelWeight: null, HasFutureData: false };
+      dateLookupMap[sk] = sRow; processed.push(sRow);
+    }
+    i += adv;
+  }
+
+  // ---- ANALYTICS LOOP: builds pillar conditional-probability tables ----
+  const analyticsStats = initConditionalStats();
+  let globalOutcomeLog = [];
+  let j = 100;
+  while (j < rawRows.length - 10) {
+    const ai = j - 1;
+    const h3 = Math.max(...rawRows.slice(ai - 2, ai + 1).map(r => r.High)), l3 = Math.min(...rawRows.slice(ai - 2, ai + 1).map(r => r.Low));
+    const ph5 = Math.max(...rawRows.slice(ai - 7, ai - 2).map(r => r.High)), pl5 = Math.min(...rawRows.slice(ai - 7, ai - 2).map(r => r.Low));
+    const h5 = Math.max(...rawRows.slice(ai - 4, ai + 1).map(r => r.High)), l5 = Math.min(...rawRows.slice(ai - 4, ai + 1).map(r => r.Low));
+    const ph10 = Math.max(...rawRows.slice(ai - 14, ai - 4).map(r => r.High)), pl10 = Math.min(...rawRows.slice(ai - 14, ai - 4).map(r => r.Low));
+    const h10 = Math.max(...rawRows.slice(ai - 9, ai + 1).map(r => r.High)), l10 = Math.min(...rawRows.slice(ai - 9, ai + 1).map(r => r.Low));
+    const ph20 = Math.max(...rawRows.slice(ai - 29, ai - 9).map(r => r.High)), pl20 = Math.min(...rawRows.slice(ai - 29, ai - 9).map(r => r.Low));
+    const zph20 = Math.max(...rawRows.slice(ai - 20, ai).map(r => r.High)), zpl20 = Math.min(...rawRows.slice(ai - 20, ai).map(r => r.Low));
+    const a14 = sharedAtr14(rawRows, ai) ?? 1;
+    const tm = ((h3 - l3) < (ph5 - pl5) ? 1 : 0) + ((h5 - l5) < (ph10 - pl10) ? 1 : 0) + ((h10 - l10) < (ph20 - pl20) ? 1 : 0);
+    const stg = tm === 3 ? 4 : tm === 2 ? 3 : tm === 1 ? 2 : 1;
+    const ac = rawRows[ai].Close, p20 = (zph20 - zpl20) > 0 ? (ac - zpl20) / (zph20 - zpl20) : 0.5;
+    const zn = p20 <= 0.33 ? "Lower Zone" : p20 >= 0.66 ? "Upper Zone" : "Middle Zone";
+    const _mainRow = dateLookupMap[rawRows[j].computedDateStr];
+    const rs = _mainRow ? _mainRow.RegimeState : rawRows[ai]._regime; // FROM FEATURE STORE fallback too
+    const rrcJ = classifyRRCState(h3 - l3, a14, rrcP33, rrcP66), bfqJ = computeBFQState(rawRows, ai), zpathJ = computeZPath(rawRows, ai, zph20, zpl20);
+    const rocJ = computeRoCGrid(rawRows, ai, a14);
+    let ehj = 0, bdj = 0;
+    for (let di = 0; di < 10; di++) { const fr = rawRows[j + di]; if (!fr) break; const mm = Math.max(Math.abs(fr.High - ac), Math.abs(ac - fr.Low)); if (a14 > 0 && mm / a14 >= 2 && bdj === 0) { bdj = di + 1; ehj = 1; } }
+    const outcome = { hit: ehj, blastDay: bdj };
+    const wdJ = new Date(rawRows[j].computedDateStr).getUTCDay(), womJ = getWeekOfMonth(rawRows[j].computedDateStr);
+    globalOutcomeLog.push({ rowIndex: j, date: rawRows[j].computedDateStr, stg, zn, rs, rrc: rrcJ, wd: wdJ, bfq: bfqJ, wom: womJ, zpath: zpathJ, roc: rocJ, outcome });
+    if (analyticsStats.regime[rs]) analyticsStats.regime[rs].outcomes.push(outcome);
+    if (analyticsStats.conditionalStage[rs]?.[stg]) analyticsStats.conditionalStage[rs][stg].outcomes.push(outcome);
+    if (analyticsStats.conditionalZone[rs]?.[zn]) analyticsStats.conditionalZone[rs][zn].outcomes.push(outcome);
+    if (rrcJ && analyticsStats.conditionalRRC[rs]?.[rrcJ]) analyticsStats.conditionalRRC[rs][rrcJ].outcomes.push(outcome);
+    if (wdJ >= 1 && wdJ <= 5 && analyticsStats.conditionalWeekday[rs]?.[wdJ]) analyticsStats.conditionalWeekday[rs][wdJ].outcomes.push(outcome);
+    if (bfqJ && analyticsStats.conditionalBFQ[rs]?.[bfqJ]) analyticsStats.conditionalBFQ[rs][bfqJ].outcomes.push(outcome);
+    if (womJ && analyticsStats.conditionalWOM[rs]?.[womJ]) analyticsStats.conditionalWOM[rs][womJ].outcomes.push(outcome);
+    if (analyticsStats.conditionalZPath[rs]?.[zpathJ] !== undefined) analyticsStats.conditionalZPath[rs][zpathJ].outcomes.push(outcome);
+    if (rocJ !== undefined && rocJ !== null && analyticsStats.conditionalRoC[rs]?.[rocJ] !== undefined) analyticsStats.conditionalRoC[rs][String(rocJ)].outcomes.push(outcome);
+    j += ehj ? bdj : 10;
+  }
+
+  // ---- Score every processed row via ProbabilityEngine (verbatim) ----
+  processed.forEach(row => {
+    const wd = new Date(row.Date).getUTCDay();
+    const prob = ProbabilityEngine(row.Stage, row.Zone, row.RegimeState, row.RRCState, wd, row.BFQState, getWeekOfMonth(row.Date), row.ZPathState || 0, row.RoCState ?? 0, analyticsStats, velFastCut, velMidCut);
+    row.MasterP = prob.masterP;
+    row._prob = prob;
+  });
+
+  // ---- regime-specific score bounds (verbatim) ----
+  let historicalScoreBounds = { "HighSptR": { min: Infinity, max: -Infinity }, "LowSptR": { min: Infinity, max: -Infinity } };
+  processed.forEach(row => {
+    const prob = row._prob;
+    if (prob.regimeSamples < 5) return;
+    const rKey = (row.RegimeState === "HighSptR" || row.RegimeState === "LowSptR") ? row.RegimeState : "HighSptR";
+    if (prob.masterP < historicalScoreBounds[rKey].min) historicalScoreBounds[rKey].min = prob.masterP;
+    if (prob.masterP > historicalScoreBounds[rKey].max) historicalScoreBounds[rKey].max = prob.masterP;
+  });
+  REGIME_KEYS.forEach(r => { if (!isFinite(historicalScoreBounds[r].min)) historicalScoreBounds[r] = { min: 0, max: 100 }; });
+
+  processed.forEach(row => {
+    const prob = row._prob;
+    const ok = prob.regimeSamples >= 5;
+    const band = ok ? getDynamicAllocation(prob.masterP, row.RegimeState, historicalScoreBounds) : { mult: "STAND DOWN", multiplier: 0, relPct: 0, note: "Insufficient pillar history." };
+    row.Relative_Score_Pct = ok ? (band.relPct * 100).toFixed(1) + "%" : "—";
+    row.Recommended_Allocation = band.mult;
+  });
+
+  return { processed, historicalScoreBounds, velFastCut, velMidCut, rrcP33, rrcP66, globalOutcomeLog };
+}
+
+
+
+// ===== engine-b-adapter.js =====
+// =============================================================================
+// ENGINE B ADAPTER — Module 4
+// =============================================================================
+// Verbatim port of Engine B's generateCycles, Sense Engine (Quietness/
+// Direction labeling), Evidence Engine (key extraction, Evidence Library),
+// Likelihood Ratio + Laplace smoothing, BRI (log-sum + sigmoid), and
+// calibration (engine_b_v6.html L599-953).
+//
+// SYNC FIX (superseding an earlier "read canonical Regime A" change that
+// caused Engine B outputs to diverge from standalone Engine B — verified
+// via runtime trace on live data, e.g. BRI 0.06 vs 74.43 on the same day):
+// this adapter now computes its OWN regime series via buildRegimeSeriesB
+// (regime-legacy-b.js, price-position + streak-confirm), identical to
+// standalone Engine B. Feature Store's canonical Regime A is untouched and
+// still used by Engine A elsewhere. Also fixed: the lookback anchor used by
+// alignEngines() now matches standalone Engine B's convention (idx+1, so
+// today counts as Day -1) instead of idx (which silently excluded today).
+//
+// DELIBERATELY NOT CHANGED (pending separate confirmation): the Sense
+// Engine's local atr14() helper (÷13, engine_b L376-381) is left exactly
+// as-is. Piju's "one shared ATR Engine" instruction would in principle
+// unify this too (shared canonical is ÷14), but that changes Quietness/
+// Direction labels and therefore Evidence Library keys — a much bigger
+// blast radius than the regime swap. Given the explicit instruction this
+// round to preserve Evidence extraction/Library construction exactly,
+// this adapter keeps the original ÷13 Sense Engine ATR untouched. Flagged
+// for Piju to decide separately (see PROGRESS.md).
+// =============================================================================
+const LOOKBACK = 9;
+const FORWARD_WINDOW = 10;
+const WARMUP_ROWS = 100;
+
+// ---- Sense Engine's own ATR helper, UNCHANGED (÷13, not the shared ÷14) ----
+function senseAtr14(rows, i) {
+  if (i < 13) return rows[i].high - rows[i].low || 1;
+  const slice = rows.slice(i - 13, i + 1);
+  let sum = 0, c = 0;
+  for (let j = 1; j < slice.length; j++) { sum += slice[j].TR; c++; }
+  return c > 0 ? sum / c : (rows[i].high - rows[i].low || 1);
+}
+
+// ---- generateCycles, verbatim except regime source ----
+// featureStoreRows: Feature Store rows (canonical Regime already attached).
+// Converted internally to Engine B's lowercase field shape (already matches).
+function generateCycles(rows, thresh, regimeArr) {
+  const cycles = [];
+  let p = WARMUP_ROWS;
+  while (p < rows.length - FORWARD_WINDOW) {
+    const a14 = rows.slice(p - 14, p).reduce((s, d) => s + d.TR, 0) / 14;
+    const anchorIdx = p - 1;
+    const ac = rows[anchorIdx].close;
+    // SYNC FIX: Engine B's own regime series (regimeArr), matching standalone
+    // Engine B exactly. Previously read Feature Store's canonical Regime A.
+    const anchorRegime = regimeArr[anchorIdx];
+
+    let blastDay = -1, maxMoveATR = 0;
+    for (let di = 0; di < FORWARD_WINDOW && p + di < rows.length; di++) {
+      const fr = rows[p + di];
+      const mm = Math.max(Math.abs(fr.high - ac), Math.abs(ac - fr.low));
+      const mmATR = a14 > 0 ? mm / a14 : 0;
+      if (mmATR > maxMoveATR) maxMoveATR = mmATR;
+      if (a14 > 0 && mmATR >= thresh) { blastDay = di; break; }
+    }
+
+    if (blastDay >= 0) {
+      const blastIdx = p + blastDay;
+      const blastBar = rows[blastIdx];
+      const moveATR = Math.max(Math.abs(blastBar.high - ac), Math.abs(ac - blastBar.low)) / a14;
+      const direction = blastBar.close >= ac ? 'Up' : 'Down';
+      cycles.push({
+        anchorIdx, anchorDate: rows[anchorIdx].date, anchorClose: ac, anchorATR14: a14,
+        regime: anchorRegime, type: 'Blast', blastIdx, blastDate: blastBar.date,
+        daysToBlast: blastDay + 1, direction, moveATR,
+      });
+      p = blastIdx + 1;
+    } else {
+      cycles.push({
+        anchorIdx, anchorDate: rows[anchorIdx].date, anchorClose: ac, anchorATR14: a14,
+        regime: anchorRegime, type: 'Miss', blastIdx: null, blastDate: null,
+        daysToBlast: null, direction: null, moveATR: maxMoveATR,
+      });
+      p += FORWARD_WINDOW;
+    }
+  }
+  return cycles;
+}
+
+// ---- Sense Engine, verbatim except regime source (ATR intentionally kept ÷13) ----
+function dailySenseRaw(rows, i) {
+  if (i < 1) return null;
+  const a = senseAtr14(rows, i);
+  const tr = rows[i].TR;
+  const quietRaw = tr / a;
+  const dirRaw = tr !== 0 ? (rows[i].close - rows[i].open) / tr : 0;
+  return { quietRaw, dirRaw };
+}
+
+function percentile(arr, p) {
+  if (!arr.length) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const idx = (p / 100) * (sorted.length - 1);
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+}
+
+function computeSenseThresholds(rows, regimeArr) {
+  const byRegime = { HighSptR: { q: [], d: [] }, LowSptR: { q: [], d: [] } };
+  for (let i = WARMUP_ROWS; i < rows.length; i++) {
+    const raw = dailySenseRaw(rows, i);
+    if (!raw) continue;
+    // SYNC FIX: Engine B's own regime series, not canonical Regime A.
+    const reg = regimeArr[i];
+    if (!byRegime[reg]) continue;
+    byRegime[reg].q.push(raw.quietRaw);
+    byRegime[reg].d.push(raw.dirRaw);
+  }
+  const thr = {};
+  for (const reg of ["HighSptR", "LowSptR"]) {
+    thr[reg] = {
+      q_p33: percentile(byRegime[reg].q, 33), q_p66: percentile(byRegime[reg].q, 66),
+      d_p33: percentile(byRegime[reg].d, 33), d_p66: percentile(byRegime[reg].d, 66),
+    };
+  }
+  return thr;
+}
+
+function labelDay(rows, i, senseThr, regimeArr) {
+  const raw = dailySenseRaw(rows, i);
+  if (!raw) return null;
+  // SYNC FIX: regime now comes from Engine B's OWN regime series (regimeArr,
+  // built by buildRegimeSeriesB — same definition standalone Engine B uses),
+  // not the Feature Store's canonical Regime A. Engine A is untouched.
+  const reg = regimeArr[i];
+  const t = senseThr[reg];
+  const qLabel = raw.quietRaw <= t.q_p33 ? 'Quiet' : raw.quietRaw >= t.q_p66 ? 'Loud' : 'Mid';
+  const dLabel = raw.dirRaw >= t.d_p66 ? 'Up' : raw.dirRaw <= t.d_p33 ? 'Down' : 'Range';
+  return { idx: i, quietRaw: raw.quietRaw, dirRaw: raw.dirRaw, qLabel, dLabel, regime: reg };
+}
+
+function lookbackLabels(rows, anchorIdx, senseThr, regimeArr) {
+  const out = [];
+  for (let d = LOOKBACK; d >= 1; d--) {
+    const idx = anchorIdx - d;
+    out.push(idx >= 1 ? labelDay(rows, idx, senseThr, regimeArr) : null);
+  }
+  return out;
+}
+
+// ---- Evidence Engine, fully verbatim (no regime/ATR dependency in the key logic itself) ----
+function sdKey(dayOffset, label) { return `SD:Day-${dayOffset}:${label}`; }
+function streakKey(startOffset, len, label, pillar) { return `STK:${pillar}:Day-${startOffset}..-${startOffset - len + 1}:${label}x${len}`; }
+function transKey(dayOffset, fromLabel, toLabel, pillar) { return `TRN:${pillar}:Day-${dayOffset + 1}->Day-${dayOffset}:${fromLabel}->${toLabel}`; }
+
+function extractEvidenceKeys(labels) {
+  const keys = new Set();
+  labels.forEach((lb, idx) => {
+    if (!lb) return;
+    const dayOffset = LOOKBACK - idx;
+    keys.add(sdKey(dayOffset, lb.qLabel));
+    keys.add(sdKey(dayOffset, lb.dLabel));
+  });
+  for (const len of [2, 3]) {
+    for (let idx = 0; idx + len <= labels.length; idx++) {
+      const slice = labels.slice(idx, idx + len);
+      if (slice.some(s => !s)) continue;
+      const startOffset = LOOKBACK - idx;
+      if (slice.every(s => s.qLabel === slice[0].qLabel)) keys.add(streakKey(startOffset, len, slice[0].qLabel, 'Q'));
+      if (slice.every(s => s.dLabel === slice[0].dLabel)) keys.add(streakKey(startOffset, len, slice[0].dLabel, 'D'));
+    }
+  }
+  for (let idx = 1; idx < labels.length; idx++) {
+    const prev = labels[idx - 1], curr = labels[idx];
+    if (!prev || !curr) continue;
+    const dayOffset = LOOKBACK - idx;
+    if (prev.qLabel !== curr.qLabel) keys.add(transKey(dayOffset, prev.qLabel, curr.qLabel, 'Q'));
+    if (prev.dLabel !== curr.dLabel) keys.add(transKey(dayOffset, prev.dLabel, curr.dLabel, 'D'));
+  }
+  return keys;
+}
+
+function buildEvidenceLibrary(cycles, senseThr, rows, regimeArr) {
+  const library = { HighSptR: new Map(), LowSptR: new Map() };
+  function bump(map, key, isBlast) {
+    if (!map.has(key)) map.set(key, { blastCount: 0, missCount: 0 });
+    const e = map.get(key);
+    if (isBlast) e.blastCount++; else e.missCount++;
+  }
+  for (const c of cycles) {
+    if (c.anchorIdx < LOOKBACK + 1) continue;
+    const labels = lookbackLabels(rows, c.anchorIdx, senseThr, regimeArr);
+    const keys = extractEvidenceKeys(labels);
+    const map = library[c.regime];
+    const isBlast = c.type === 'Blast';
+    keys.forEach(k => bump(map, k, isBlast));
+  }
+  return library;
+}
+
+function computeLR(blastCount, missCount, totalBlast, totalMiss) {
+  const pBlast = (blastCount + 1) / (totalBlast + 1);
+  const pMiss = (missCount + 1) / (totalMiss + 1);
+  return pBlast / pMiss;
+}
+
+function finalizeLibrary(library, cycles, minSamples) {
+  const totals = { HighSptR: { blast: 0, miss: 0 }, LowSptR: { blast: 0, miss: 0 } };
+  cycles.forEach(c => { if (c.type === 'Blast') totals[c.regime].blast++; else totals[c.regime].miss++; });
+  const finalized = { HighSptR: [], LowSptR: [] };
+  for (const regime of ["HighSptR", "LowSptR"]) {
+    const tot = totals[regime];
+    library[regime].forEach((counts, key) => {
+      const sample = counts.blastCount + counts.missCount;
+      if (sample < minSamples) return;
+      const lr = computeLR(counts.blastCount, counts.missCount, tot.blast, tot.miss);
+      finalized[regime].push(Object.freeze({ key, blastCount: counts.blastCount, missCount: counts.missCount, sample, lr, logLR: Math.log(lr) }));
+    });
+    finalized[regime].sort((a, b) => b.lr - a.lr);
+    Object.freeze(finalized[regime]);
+  }
+  Object.freeze(finalized);
+  Object.freeze(totals.HighSptR); Object.freeze(totals.LowSptR); Object.freeze(totals);
+  return { finalized, totals };
+}
+
+function parseEvidenceKey(key) {
+  if (key.startsWith('SD:')) return { type: 'singleDay', label: key.slice(3) };
+  if (key.startsWith('STK:')) return { type: 'streak', label: key.slice(4) };
+  if (key.startsWith('TRN:')) return { type: 'transition', label: key.slice(4) };
+  return { type: 'unknown', label: key };
+}
+
+function computeBRI(liveLabels, finalizedRegimeList) {
+  const lookup = new Map(finalizedRegimeList.map(e => [e.key, e]));
+  const liveKeys = extractEvidenceKeys(liveLabels);
+  const active = [];
+  let logSum = 0;
+  liveKeys.forEach(k => {
+    const e = lookup.get(k);
+    if (!e) return;
+    logSum += e.logLR;
+    active.push(e);
+  });
+  const bri = 100 / (1 + Math.exp(-logSum));
+  const positiveAll = active.filter(e => e.lr > 1).sort((a, b) => b.lr - a.lr);
+  const negativeAll = active.filter(e => e.lr < 1).sort((a, b) => a.lr - b.lr);
+  return {
+    bri, logSum, activeCount: active.length,
+    positive: positiveAll.slice(0, 5), negative: negativeAll.slice(0, 5),
+    positiveCount: positiveAll.length, negativeCount: negativeAll.length,
+  };
+}
+
+function runCalibration(rows, cycles, senseThr, finalized, regimeArr) {
+  const bins = Array.from({ length: 10 }, () => ({ total: 0, blast: 0 }));
+  for (let i = 0; i < cycles.length; i++) {
+    const c = cycles[i];
+    if (c.anchorIdx < LOOKBACK + 1) continue;
+    const labels = lookbackLabels(rows, c.anchorIdx, senseThr, regimeArr);
+    const res = computeBRI(labels, finalized[c.regime]);
+    let bin = Math.floor(res.bri / 10); if (bin > 9) bin = 9; if (bin < 0) bin = 0;
+    bins[bin].total++;
+    if (c.type === 'Blast') bins[bin].blast++;
+  }
+  return bins;
+}
+
+// =============================================================================
+// MAIN ADAPTER ENTRY POINT
+// =============================================================================
+// featureStoreRows: output of buildFeatureStore(rawRows).rows — must include
+// canonical Regime. thresh: blast ATR multiplier (2, per locked constant).
+// minSamples: Evidence Library minimum sample threshold (default 5).
+function runEngineB(featureStoreRows, thresh = 2, minSamples = 5) {
+  if (featureStoreRows.length < WARMUP_ROWS + FORWARD_WINDOW) {
+    throw new Error(`Engine B adapter needs >= ${WARMUP_ROWS + FORWARD_WINDOW} rows, got ${featureStoreRows.length}`);
+  }
+  const rows = featureStoreRows; // .close/.high/.low/.open/.TR used; .Regime (canonical A) NOT used below
+
+  // SYNC FIX (verified 100% match against standalone Engine B): Engine B
+  // computes its OWN regime series here — same buildRegimeSeriesB already
+  // defined in regime-legacy-b.js — instead of reading the Feature Store's
+  // canonical Regime A. Engine A's own regime usage is completely untouched.
+  const regimeBSeries = buildRegimeSeriesB(rows);
+  const regimeArr = regimeBSeries.confirmed;
+
+  const cycles = generateCycles(rows, thresh, regimeArr);
+  const senseThr = computeSenseThresholds(rows, regimeArr);
+  const library = buildEvidenceLibrary(cycles, senseThr, rows, regimeArr);
+  const { finalized, totals } = finalizeLibrary(library, cycles, minSamples);
+  const calibBins = runCalibration(rows, cycles, senseThr, finalized, regimeArr);
+
+  return { cycles, senseThr, library, finalized, totals, calibBins, regimeB: regimeBSeries };
+}
+
+
+
+// ===== engine-c-decision.js =====
+// =============================================================================
+// MODULE 5 — ENGINE C DECISION INTELLIGENCE
+// =============================================================================
+// Consumes Engine A (Market Structure) and Engine B (Volatility Expansion
+// Probability) outputs ONLY. Never touches their formulas/weights/thresholds.
+// This is the ONLY place outputs are combined (per Piju's architecture rule).
+//
+// Priority order implemented: Agreement -> Conflict -> Reliability ->
+// Confidence -> Decision Panel.
+// =============================================================================
+
+// ---- 0. Alignment: join Engine A's daily rows with Engine B's live BRI ----
+// Engine A grain = rolling daily. Engine B grain = non-overlapping cycles,
+// but its finalized Evidence Library + computeBRI can be replayed at ANY
+// date (not just cycle anchors) — that's how we get a same-day B reading
+// for every Engine A day, without altering either engine's cycle logic.
+function alignEngines(featureStoreRows, engineAResult, engineBAdapter, engineBResult) {
+  const { lookbackLabels, computeBRI } = engineBAdapter;
+  const rowByDate = new Map(featureStoreRows.map((r, idx) => [r.date, idx]));
+  const aligned = [];
+  for (const aRow of engineAResult.processed) {
+    const idx = rowByDate.get(aRow.Date);
+    if (idx === undefined || idx < 10) continue; // insufficient history for B lookback
+    // LIVE-ROW FIX: standalone Engine B uses TWO anchor conventions —
+    // historical cycles anchor at (p-1), matching Engine A's ai = idx-1;
+    // but its live "today" signal deliberately anchors at (todayIdx+1) to
+    // include today's own completed bar (see index1.html runEngineB:
+    // "virtual anchor: today = Day -1"). Only the most recent row should
+    // use that live convention; every other (historical) row keeps idx-1,
+    // which was already verified via 10-prediction regression test.
+    const isLiveRow = (idx === featureStoreRows.length - 1);
+    const regime = engineBResult.regimeB.confirmed[isLiveRow ? idx : idx - 1];
+    if (!regime || !engineBResult.finalized[regime]) continue;
+    const anchorIdx = isLiveRow ? idx + 1 : idx - 1;
+    const labels = lookbackLabels(featureStoreRows, anchorIdx, engineBResult.senseThr, engineBResult.regimeB.confirmed);
+    const bri = computeBRI(labels, engineBResult.finalized[regime]);
+    aligned.push({
+      date: aRow.Date, idx, regime,
+      A: { masterP: aRow.MasterP, relPct: parseFloat(aRow.Relative_Score_Pct) || 0, allocation: aRow.Recommended_Allocation },
+      B: { bri: bri.bri, logSum: bri.logSum, activeCount: bri.activeCount, positiveCount: bri.positiveCount, negativeCount: bri.negativeCount },
+      outcome: { hit: aRow.ExpansionHit, blastDay: aRow.BlastDay, hasFuture: aRow.HasFutureData },
+    });
+  }
+  return aligned;
+}
+
+// ---- 1. Dynamic bucketing (terciles from the aligned dataset itself — never hardcoded) ----
+function computeTercileCuts(values) {
+  const v = values.filter(x => x !== null && x !== undefined && !isNaN(x)).sort((a, b) => a - b);
+  if (!v.length) return { p33: 0, p66: 0 };
+  return { p33: v[Math.floor(v.length * 0.33)], p66: v[Math.floor(v.length * 0.66)] };
+}
+function bucketize(value, cuts) {
+  if (value === null || value === undefined || isNaN(value)) return null;
+  return value <= cuts.p33 ? 'Low' : value >= cuts.p66 ? 'High' : 'Medium';
+}
+
+// ---- 2. Agreement Detector ----
+const AGREEMENT_ORDER = { Low: 0, Medium: 1, High: 2 };
+function agreementDetector(bucketA, bucketB) {
+  if (bucketA === null || bucketB === null) return { label: 'Unknown', distance: null };
+  const dist = Math.abs(AGREEMENT_ORDER[bucketA] - AGREEMENT_ORDER[bucketB]);
+  const label = dist === 0 ? 'Excellent' : dist === 1 ? 'Moderate' : 'Weak';
+  return { label, distance: dist };
+}
+
+// ---- 3. Conflict Detector ----
+function conflictDetector(bucketA, bucketB) {
+  if (bucketA === null || bucketB === null) return { isConflict: false, explanation: 'Insufficient data.' };
+  if (bucketA === 'High' && bucketB === 'Low') return { isConflict: true, explanation: 'Engine A (Structure) sees strength while Engine B (Volatility Readiness) sees weak historical evidence for expansion. Structure may be building without a historical trigger pattern present.' };
+  if (bucketA === 'Low' && bucketB === 'High') return { isConflict: true, explanation: 'Engine B (Volatility Readiness) sees strong historical evidence for expansion while Engine A (Structure) is weak. Historical pattern present but market structure not yet confirming.' };
+  return { isConflict: false, explanation: 'No material conflict between Structure and Volatility Readiness.' };
+}
+
+// ---- 4. Decision Matrix + Historical Reliability ----
+// Built from ALL aligned historical days (bucketA x bucketB -> historical blast rate).
+// Never hardcoded — purely derived from the aligned dataset each run.
+function buildDecisionMatrix(aligned, cutsA, cutsB) {
+  const buckets = ['Low', 'Medium', 'High'];
+  const matrix = {};
+  buckets.forEach(ba => { matrix[ba] = {}; buckets.forEach(bb => { matrix[ba][bb] = { n: 0, blasts: 0 }; }); });
+  for (const row of aligned) {
+    if (!row.outcome.hasFuture) continue; // exclude days without a resolved forward outcome
+    const ba = bucketize(row.A.relPct, cutsA), bb = bucketize(row.B.bri, cutsB);
+    if (!ba || !bb) continue;
+    matrix[ba][bb].n++;
+    if (row.outcome.hit) matrix[ba][bb].blasts++;
+  }
+  buckets.forEach(ba => buckets.forEach(bb => { const c = matrix[ba][bb]; c.blastRate = c.n ? c.blasts / c.n : null; }));
+  return matrix;
+}
+
+// Reliability: sample size + evidence diversity (activeCount) + agreement,
+// bucketed via dynamic percentiles of sample sizes actually observed in
+// this matrix (never a hardcoded "n>=30" style rule).
+function computeReliability(matrix, cellN, activeCount, agreementLabel) {
+  const allN = [];
+  Object.values(matrix).forEach(row => Object.values(row).forEach(c => allN.push(c.n)));
+  const nCuts = computeTercileCuts(allN);
+  const nBucket = bucketize(cellN, nCuts) || 'Low';
+  let score = ({ Low: 0, Medium: 1, High: 2 }[nBucket]) + ({ Weak: 0, Moderate: 1, Excellent: 2 }[agreementLabel] ?? 0);
+  if (activeCount >= 5) score += 1; // evidence diversity bonus (some active evidence engaged)
+  if (score <= 1) return 'Low';
+  if (score <= 3) return 'Medium';
+  if (score <= 4) return 'High';
+  return 'Very High';
+}
+
+// ---- 5. Bayesian Fusion (prior = empirical historical blast rate for the
+// matrix cell; likelihood = Engine B's own logSum, i.e. exp(logSum) as LR) ----
+function bayesianFusion(priorProb, logSumB) {
+  const p = Math.min(0.999, Math.max(0.001, priorProb));
+  const priorOdds = p / (1 - p);
+  const likelihoodRatio = Math.exp(logSumB);
+  const posteriorOdds = priorOdds * likelihoodRatio;
+  const posteriorProb = posteriorOdds / (1 + posteriorOdds);
+  return { priorProb: p, likelihoodRatio, posteriorProb };
+}
+
+// ---- 6. Trading Confidence Score (weighted fusion, NOT an average) ----
+const RELIABILITY_WEIGHT = { Low: 0.4, Medium: 0.65, High: 0.85, 'Very High': 1.0 };
+function convictionScore(posteriorProb, reliabilityBucket) {
+  const w = RELIABILITY_WEIGHT[reliabilityBucket] ?? 0.4;
+  // Pull toward 50 (neutral) when reliability is low — low reliability should
+  // suppress conviction, not just be reported alongside it.
+  const raw = posteriorProb * 100;
+  return raw * w + 50 * (1 - w);
+}
+
+// =============================================================================
+// MAIN ENTRY POINT
+// =============================================================================
+function runEngineC(featureStoreRows, engineAResult, engineBAdapter, engineBResult) {
+  const aligned = alignEngines(featureStoreRows, engineAResult, engineBAdapter, engineBResult);
+  const cutsA = computeTercileCuts(aligned.map(r => r.A.relPct));
+  const cutsB = computeTercileCuts(aligned.map(r => r.B.bri));
+  const matrix = buildDecisionMatrix(aligned, cutsA, cutsB);
+
+  const panel = aligned.map(row => {
+    const ba = bucketize(row.A.relPct, cutsA), bb = bucketize(row.B.bri, cutsB);
+    const agreement = agreementDetector(ba, bb);
+    const conflict = conflictDetector(ba, bb);
+    const cell = (ba && bb) ? matrix[ba][bb] : { n: 0, blastRate: null };
+    const reliability = computeReliability(matrix, cell.n, row.B.activeCount, agreement.label);
+    const prior = cell.blastRate !== null ? cell.blastRate : 0.5; // neutral prior if cell empty
+    const fusion = bayesianFusion(prior, row.B.logSum);
+    const conviction = convictionScore(fusion.posteriorProb, reliability);
+    return {
+      date: row.date, bucketA: ba, bucketB: bb,
+      agreement: agreement.label, conflict: conflict.isConflict, conflictExplanation: conflict.explanation,
+      historicalBlastRate: cell.blastRate, sampleSize: cell.n, reliability,
+      priorProb: fusion.priorProb, likelihoodRatio: fusion.likelihoodRatio, posteriorProb: fusion.posteriorProb,
+      convictionScore: conviction,
+      why: {
+        engineAQuality: `${row.A.relPct.toFixed(1)}% (${ba})`,
+        engineBReadiness: `BRI ${row.B.bri.toFixed(1)} (${bb})`,
+        agreement: agreement.label,
+        evidenceCount: row.B.activeCount,
+        historicalSample: `${cell.n} similar historical days, ${cell.blastRate !== null ? (cell.blastRate * 100).toFixed(1) + '% blast rate' : 'no data'}`,
+        posterior: `${(fusion.posteriorProb * 100).toFixed(1)}%`,
+      },
+    };
+  });
+
+  return { aligned, cutsA, cutsB, matrix, panel };
+}
+
+
+
+// ===== validation-suite.js =====
+// =============================================================================
+// VALIDATION SUITE — Module 6
+// =============================================================================
+// Read-only. Consumes Module 5's aligned panel + Engine A/B outputs.
+// Never touches Engine A or Engine B math.
+// =============================================================================
+
+// ---- 1. Historical Replay ----
+// Module 5's panel IS the day-by-day replay already (bucket, agreement,
+// conflict, reliability, conviction, actual outcome). This just adds the
+// realized outcome alongside each entry for review.
+function historicalReplay(panel, aligned) {
+  const outcomeByDate = new Map(aligned.map(r => [r.date, r.outcome]));
+  return panel.map(p => ({ ...p, outcome: outcomeByDate.get(p.date) || null }));
+}
+
+// ---- 2. Calibration Report ----
+// Bins a [0,100] score into deciles, compares observed blast rate per bin
+// vs the bin's expected rate (midpoint), reports Brier score (lower=better).
+function calibrationReport(replay, scoreKey) {
+  const bins = Array.from({ length: 10 }, () => ({ total: 0, blasts: 0, scoreSum: 0 }));
+  let brierSum = 0, brierN = 0;
+  for (const row of replay) {
+    if (!row.outcome || !row.outcome.hasFuture) continue;
+    const score = row[scoreKey];
+    if (score === null || score === undefined || isNaN(score)) continue;
+    let bin = Math.floor(score / 10); if (bin > 9) bin = 9; if (bin < 0) bin = 0;
+    bins[bin].total++; bins[bin].scoreSum += score;
+    const hit = row.outcome.hit ? 1 : 0;
+    if (hit) bins[bin].blasts++;
+    const p = score / 100;
+    brierSum += Math.pow(p - hit, 2); brierN++;
+  }
+  const table = bins.map((b, i) => ({
+    bin: `${i * 10}-${i * 10 + 10}`, n: b.total,
+    avgScore: b.total ? b.scoreSum / b.total : null,
+    observedBlastRate: b.total ? b.blasts / b.total : null,
+  }));
+  return { table, brierScore: brierN ? brierSum / brierN : null, n: brierN };
+}
+
+// ---- 3. Error Analysis ----
+// Confusion matrix + precision/recall/F1 at dynamic threshold cut points
+// (percentiles of the score's own distribution — never hardcoded).
+function computePercentileCuts(values, percentiles) {
+  const v = values.filter(x => x !== null && !isNaN(x)).sort((a, b) => a - b);
+  const out = {};
+  percentiles.forEach(p => { out[p] = v.length ? v[Math.min(v.length - 1, Math.floor(v.length * p))] : null; });
+  return out;
+}
+function errorAnalysis(replay, scoreKey) {
+  const scored = replay.filter(r => r.outcome && r.outcome.hasFuture && r[scoreKey] !== null && r[scoreKey] !== undefined);
+  const cuts = computePercentileCuts(scored.map(r => r[scoreKey]), [0.5, 0.75, 0.9]);
+  const results = {};
+  for (const p of [0.5, 0.75, 0.9]) {
+    const threshold = cuts[p];
+    if (threshold === null) { results[p] = null; continue; }
+    let tp = 0, fp = 0, tn = 0, fn = 0;
+    scored.forEach(r => {
+      const predicted = r[scoreKey] >= threshold;
+      const actual = !!r.outcome.hit;
+      if (predicted && actual) tp++; else if (predicted && !actual) fp++;
+      else if (!predicted && actual) fn++; else tn++;
+    });
+    const precision = (tp + fp) ? tp / (tp + fp) : null;
+    const recall = (tp + fn) ? tp / (tp + fn) : null;
+    const f1 = (precision !== null && recall !== null && (precision + recall) > 0) ? 2 * precision * recall / (precision + recall) : null;
+    results[p] = { threshold, tp, fp, tn, fn, precision, recall, f1, n: scored.length };
+  }
+  return results;
+}
+
+// ---- 4. Regime Reports ----
+function regimeReports(replay) {
+  const regimes = ['HighSptR', 'LowSptR'];
+  const out = {};
+  for (const reg of regimes) {
+    const rows = replay.filter(r => r.bucketA !== null && r.regime === reg); // note: needs regime on replay row (added in runValidationSuite)
+    const withOutcome = rows.filter(r => r.outcome && r.outcome.hasFuture);
+    const blastRate = withOutcome.length ? withOutcome.filter(r => r.outcome.hit).length / withOutcome.length : null;
+    const avg = (arr, key) => arr.length ? arr.reduce((s, r) => s + (r[key] || 0), 0) / arr.length : null;
+    out[reg] = {
+      n: rows.length,
+      blastRate,
+      avgConvictionScore: avg(rows, 'convictionScore'),
+      conflictRate: rows.length ? rows.filter(r => r.conflict).length / rows.length : null,
+    };
+  }
+  return out;
+}
+
+// =============================================================================
+// MAIN ENTRY POINT
+// =============================================================================
+function runValidationSuite(engineCResult) {
+  const { panel, aligned } = engineCResult;
+  const regimeByDate = new Map(aligned.map(r => [r.date, r.regime]));
+  const replay = historicalReplay(panel, aligned).map(r => ({
+    ...r, regime: regimeByDate.get(r.date),
+    posteriorProbPct: r.posteriorProb !== null && r.posteriorProb !== undefined ? r.posteriorProb * 100 : null,
+  }));
+
+  return {
+    replay,
+    calibration: {
+      byConvictionScore: calibrationReport(replay, 'convictionScore'),
+      byPosteriorProb: calibrationReport(replay, 'posteriorProbPct'),
+    },
+    errorAnalysis: errorAnalysis(replay, 'convictionScore'),
+    regimeReports: regimeReports(replay),
+  };
+}
+
+
+
+</script>
+<script>
+// =====================================================================
+// UI WIRING
+// =====================================================================
+let _rawRows = null, _fs = null, _aResult = null, _bResult = null, _cResult = null, _vResult = null;
+
+function simpleCsvParse(text){
+  const lines=text.trim().split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<2)throw new Error('CSV too short');
+  const header=lines[0].split(',').map(h=>h.trim());
+  const out=[];
+  for(let i=1;i<lines.length;i++){
+    const cols=lines[i].split(',');
+    const obj={};
+    header.forEach((h,idx)=>obj[h]=cols[idx]);
+    out.push(obj);
+  }
+  return out;
+}
+
+// ---- runPipeline: shared by auto-fetch AND manual upload paths ----
+function runPipeline(rawRows, thresh, minSamples, sourceLabel){
+  const statusEl=document.getElementById('loadStatus');
+  const errEl=document.getElementById('loadErr');
+  errEl.textContent='';
+  try{
+    statusEl.textContent = 'Running Feature Store...';
+    _rawRows = rawRows;
+    _fs = buildFeatureStore(_rawRows);
+    statusEl.textContent = `Feature Store: ${_fs.rows.length} clean rows. Running Engine A...`;
+    _aResult = runEngineA(_fs.rows);
+    statusEl.textContent += ` Engine A: ${_aResult.processed.length} rows. Running Engine B...`;
+    _bResult = runEngineB(_fs.rows, thresh, minSamples);
+    statusEl.textContent += ` Engine B: ${_bResult.cycles.length} cycles. Running Engine C...`;
+    const engineBAdapterRef = { lookbackLabels, computeBRI };
+    _cResult = runEngineC(_fs.rows, _aResult, engineBAdapterRef, _bResult);
+    statusEl.textContent += ` Engine C: ${_cResult.aligned.length} aligned days. Running Validation Suite...`;
+    _vResult = runValidationSuite(_cResult);
+    statusEl.textContent = `Done. Clean rows: ${_fs.rows.length} | Engine A rows: ${_aResult.processed.length} | Engine B cycles: ${_bResult.cycles.length} | Aligned: ${_cResult.aligned.length}`;
+    document.getElementById('results').style.display='block';
+    renderAll();
+
+    const lastRow = _fs.rows[_fs.rows.length-1];
+    document.getElementById('lastTradingDate').textContent = 'Last Trading Date: ' + (lastRow ? lastRow.date : '—');
+    document.getElementById('lastUpdated').textContent = 'Last Updated: ' + new Date().toLocaleTimeString();
+    document.getElementById('sourceIndicator').textContent = '🟢 Data Source: ' + sourceLabel;
+  }catch(err){
+    errEl.textContent = 'Pipeline error: ' + err.message;
+    document.getElementById('sourceIndicator').textContent = '🔴 Data Source: ' + sourceLabel + ' (error)';
+    console.error(err);
+  }
+}
+
+// ---- Auto-fetch: same multi-route CSV fetch approach as the original app ----
+const DEFAULT_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0WRRoaKlcjrQ6xthFpq5r5n8XQpUSeUg7rsy0zXBUdx46HBacISyimAsIRbGPRYpsvpkUGwLCSJQm/pub?output=csv";
+const CSV_CACHE_KEY = 'engineC_last_good_csv';
+function fetchWithTimeout(url, opts, ms){ return Promise.race([fetch(url, opts||{}), new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout')), ms))]); }
+
+function autoFetchAndRun(){
+  const statusEl=document.getElementById('loadStatus');
+  const errEl=document.getElementById('loadErr');
+  const refreshBtn=document.getElementById('refreshBtn');
+  errEl.textContent='';
+  refreshBtn.disabled = true; refreshBtn.textContent = '⏳ Fetching...';
+  document.getElementById('sourceIndicator').textContent = '⚪ Data Source: Fetching...';
+  const bust = (DEFAULT_SHEET_URL.indexOf('?')!==-1?'&':'?') + '_cb=' + Date.now();
+  const fresh = DEFAULT_SHEET_URL + bust;
+  const routes = [
+    {label:'Direct', run:()=>fetchWithTimeout(fresh,{cache:'no-store'},7000).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status); return r.text();})},
+    {label:'corsproxy.io', run:()=>fetchWithTimeout('https://corsproxy.io/?'+encodeURIComponent(fresh),{},7000).then(r=>{if(!r.ok)throw new Error(); return r.text();})},
+    {label:'api.codetabs', run:()=>fetchWithTimeout('https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(DEFAULT_SHEET_URL),{},7000).then(r=>{if(!r.ok)throw new Error(); return r.text();})},
+    {label:'allorigins.win', run:()=>fetchWithTimeout('https://api.allorigins.win/get?url='+encodeURIComponent(DEFAULT_SHEET_URL),{},8000).then(r=>r.json()).then(j=>{if(!j.contents)throw new Error(); return j.contents;})},
+  ];
+  let idx=0;
+  function tryNext(){
+    if(idx>=routes.length){
+      let cached=null; try{ cached=localStorage.getItem(CSV_CACHE_KEY); }catch(e){}
+      refreshBtn.disabled=false; refreshBtn.textContent='🔄 Refresh';
+      if(cached && cached.indexOf(',')!==-1){
+        errEl.textContent='⚠️ Network unavailable — running on last cached data.';
+        const rows = simpleCsvParse(cached);
+        runPipeline(rows, parseFloat(document.getElementById('threshInput').value)||2, parseInt(document.getElementById('minSamplesInput').value)||5, 'Cached (offline)');
+      } else {
+        errEl.textContent = 'All fetch routes failed and no cached data available. Use "Upload Local CSV".';
+        document.getElementById('sourceIndicator').textContent = '🔴 Data Source: Fetch failed';
+      }
+      return;
+    }
+    statusEl.textContent = `Fetching via ${routes[idx].label} (route ${idx+1}/${routes.length})...`;
+    routes[idx].run().then(text=>{
+      if(!text || text.indexOf(',')===-1) throw new Error('Invalid CSV response');
+      try{ localStorage.setItem(CSV_CACHE_KEY, text); }catch(e){}
+      refreshBtn.disabled=false; refreshBtn.textContent='🔄 Refresh';
+      const rows = simpleCsvParse(text);
+      runPipeline(rows, parseFloat(document.getElementById('threshInput').value)||2, parseInt(document.getElementById('minSamplesInput').value)||5, 'Google Sheets (Live)');
+    }).catch(()=>{ idx++; tryNext(); });
+  }
+  tryNext();
+}
+
+document.getElementById('refreshBtn').addEventListener('click', autoFetchAndRun);
+window.addEventListener('DOMContentLoaded', autoFetchAndRun);
+
+// ---- Secondary: manual upload, hidden until explicitly requested ----
+document.getElementById('showUploadBtn').addEventListener('click', function(){
+  const panel = document.getElementById('uploadPanel');
+  panel.style.display = panel.style.display==='none' ? 'flex' : 'none';
+});
+
+document.getElementById('csvFile').addEventListener('change', function(e){
+  const file=e.target.files[0];
+  if(!file)return;
+  const statusEl=document.getElementById('loadStatus');
+  const errEl=document.getElementById('loadErr');
+  errEl.textContent=''; statusEl.textContent='Reading file...';
+  const reader=new FileReader();
+  reader.onload=function(evt){
+    try{
+      _rawRows = simpleCsvParse(evt.target.result);
+      statusEl.textContent = `Loaded ${_rawRows.length} raw rows from local file. Click "Run Pipeline On Uploaded File".`;
+      document.getElementById('runUploadBtn').disabled = false;
+    }catch(err){
+      errEl.textContent='Error: '+err.message; statusEl.textContent='';
+    }
+  };
+  reader.readAsText(file);
+});
+
+document.getElementById('runUploadBtn').addEventListener('click', function(){
+  const thresh = parseFloat(document.getElementById('threshInput').value) || 2;
+  const minSamples = parseInt(document.getElementById('minSamplesInput').value) || 5;
+  runPipeline(_rawRows, thresh, minSamples, 'Local Upload');
+});
+
+// ---- Tabs ----
+document.querySelectorAll('button.tab').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('button.tab').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tabcontent').forEach(c=>c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+  });
+});
+
+function pct(x,d=1){return x===null||x===undefined||isNaN(x)?'—':(x*100).toFixed(d)+'%';}
+function num(x,d=2){return x===null||x===undefined||isNaN(x)?'—':Number(x).toFixed(d);}
+function pillClass(v){ return v==='High'?'high':v==='Low'?'low':v==='Medium'?'medium':''; }
+
+// ---- Presentation-only helpers (no math, just translation to trader language) ----
+function convictionColor(score){ return score>=66?'#16a34a':score>=33?'#d97706':'#dc2626'; }
+function convictionLabel(score){ return score>=66?'HIGH':score>=33?'MEDIUM':'LOW'; }
+function probColor(p){ const pctv=p*100; return pctv>=66?'#16a34a':pctv>=33?'#d97706':'#dc2626'; }
+function agreementBadgeClass(a){ return a==='Excellent'?'green':a==='Moderate'?'amber':a==='Weak'?'red':'slate'; }
+function reliabilityStars(r){
+  const n = {Low:1, Medium:2, High:3, 'Very High':4}[r] || 0;
+  let html = '<span class="stars">';
+  for(let i=1;i<=4;i++) html += `<span class="${i<=n?'filled':''}">★</span>`;
+  return html + '</span>';
+}
+function badgeFor(value, kind){
+  const colorMap = {
+    HighSptR:'red', LowSptR:'blue',
+    'Upper Zone':'amber', 'Middle Zone':'slate', 'Lower Zone':'blue',
+    4:'red', 3:'amber', 2:'slate', 1:'blue',
+  };
+  const c = colorMap[value] || 'slate';
+  const label = kind==='stage' ? `Stage ${value}` : value;
+  return `<span class="badge ${c}">${label}</span>`;
+}
+function positionWording(allocation){
+  if(!allocation) return '—';
+  if(allocation === 'STAND DOWN') return 'No Position (Stand Down)';
+  const m = allocation.match(/([\d.]+)/);
+  if(m){ const pctVal = Math.round(parseFloat(m[1])*100); return `${pctVal}% of Maximum Allocation`; }
+  return allocation;
+}
+
+function renderAll(){
+  renderOverview();
+  renderEngineA();
+  renderEngineB();
+  renderEngineC();
+  renderValidation();
+}
+
+// Consistency Validation: flags when historical blast rate and final posterior
+// diverge sharply, and explains which component is driving the gap. Purely
+// explanatory — does not change any underlying number.
+const CONSISTENCY_GAP_THRESHOLD = 0.35; // configurable; 35 percentage points
+function checkConsistency(last){
+  if(last.historicalBlastRate===null) return null;
+  const gap = Math.abs(last.historicalBlastRate - last.posteriorProb);
+  if(gap <= CONSISTENCY_GAP_THRESHOLD) return null;
+  let driver;
+  if(last.reliability==='Low' || last.reliability==='Medium'){
+    driver = `Reliability is ${last.reliability}, which pulls the Conviction Score toward neutral — the raw historical rate alone isn't fully trusted yet given limited sample size.`;
+  } else if(Math.abs(last.likelihoodRatio-1) > 2){
+    driver = `Engine B's fresh evidence (Likelihood Ratio ${num(last.likelihoodRatio,2)}x) is meaningfully updating the historical base rate via the Bayesian calculation.`;
+  } else {
+    driver = `The Bayesian update combined multiple factors — see the explainability flow above for the full chain.`;
+  }
+  return { gap, driver };
+}
+
+function renderOverview(){
+  const last = _cResult.panel[_cResult.panel.length-1];
+  const lastARow = _aResult.processed.find(r=>r.Date===(last?last.date:null));
+  if(last){
+    document.getElementById('heroDate').textContent = last.date;
+    document.getElementById('heroConviction').textContent = num(last.convictionScore,0);
+    document.getElementById('heroConviction').style.color = ''; // keep gradient text
+    document.getElementById('heroConvictionLabel').innerHTML = `CONVICTION SCORE (0–100) — <span style="color:${convictionColor(last.convictionScore)}">${convictionLabel(last.convictionScore)}</span>`;
+    const fill = document.getElementById('heroGaugeFill');
+    fill.style.width = Math.max(2,last.convictionScore) + '%';
+    fill.style.background = convictionColor(last.convictionScore);
+
+    const bp = document.getElementById('heroBlastProb');
+    bp.textContent = pct(last.posteriorProb,0);
+    bp.style.color = probColor(last.posteriorProb);
+
+    document.getElementById('heroReliability').innerHTML = reliabilityStars(last.reliability) + `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${last.reliability}</div>`;
+    document.getElementById('heroAgreement').innerHTML = `<span class="badge ${agreementBadgeClass(last.agreement)}">${last.agreement}</span>`;
+    document.getElementById('heroPosition').textContent = lastARow ? positionWording(lastARow.Recommended_Allocation) : '—';
+
+    document.getElementById('heroConflictWarning').innerHTML = last.conflict
+      ? `<div class="warning-banner"><div class="title">⚠ Engines Disagree</div><div style="margin-top:6px">${last.conflictExplanation}</div></div>` : '';
+
+    // Explainability flow
+    document.getElementById('explainFlow').innerHTML = `
+      <div class="flow-step"><div class="k">Engine A Quality</div><div class="val">${last.why.engineAQuality}</div></div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-step"><div class="k">Engine B Readiness</div><div class="val">${last.why.engineBReadiness}</div></div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-step"><div class="k">Bayesian Update</div><div class="val">Prior ${pct(last.priorProb,0)} × Likelihood ${num(last.likelihoodRatio,2)}x</div></div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-step" style="background:#eff6ff;border-color:#bfdbfe;"><div class="k">Final Blast Probability</div><div class="val" style="color:${probColor(last.posteriorProb)}">${pct(last.posteriorProb,0)}</div></div>
+    `;
+
+    // Consistency validation
+    const consistency = checkConsistency(last);
+    document.getElementById('consistencyWarningSlot').innerHTML = consistency ? `
+      <div class="card">
+        <div class="warning-banner">
+          <div class="title">⚠ Review Recommendation</div>
+          <div style="margin-top:6px">Historical Blast Rate for this setup is <strong>${pct(last.historicalBlastRate,0)}</strong>, but the Final Probability is <strong>${pct(last.posteriorProb,0)}</strong> — a gap of ${(consistency.gap*100).toFixed(0)} points.</div>
+          <div style="margin-top:6px">${consistency.driver}</div>
+        </div>
+      </div>` : '';
+
+    // Engine B Developer Diagnostics — read-only mirror of standalone Engine B's
+    // own dev panel (logSum, activeCount, pos/neg, regime confirmation), computed
+    // for the exact same live row alignEngines() just used. Collapsed by default.
+    // NOTE: idx/regime/B live on _cResult.aligned, not on panel rows — panel only
+    // carries the derived decision fields (bucketA/B, agreement, conviction, etc).
+    const lastAligned = _cResult.aligned[_cResult.aligned.length - 1];
+    const liveIdx = _fs.rows.length - 1;
+    const isLiveRow = (lastAligned.idx === liveIdx);
+    const regimeAnchorIdx = isLiveRow ? liveIdx : liveIdx - 1;
+    const rawRegimeToday = rawRegimeB(_fs.rows, regimeAnchorIdx);
+    const confirmedToday = _bResult.regimeB.confirmed[regimeAnchorIdx];
+    const confirmedYesterday = _bResult.regimeB.confirmed[regimeAnchorIdx - 1];
+    const regimeChangedToday = confirmedToday !== confirmedYesterday;
+    document.getElementById('engineBDevDiagSlot').innerHTML = `
+      <div class="card">
+        <details>
+          <summary style="cursor:pointer;font-size:13px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;">⚙ Developer Diagnostics — Engine B (canonical) <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--text-muted);font-size:11px;">— read-only, matches standalone Engine B before Engine C's Bayesian layer</span></summary>
+          <div class="why" style="margin-top:12px;font-family:monospace;font-size:13px;line-height:2;">
+            logSum = ${lastAligned.B.logSum.toFixed(4)}<br>
+            activeCount = ${lastAligned.B.activeCount}<br>
+            positiveCount = ${lastAligned.B.positiveCount}<br>
+            negativeCount = ${lastAligned.B.negativeCount}<br>
+            Raw Regime = ${rawRegimeToday}<br>
+            Confirmed Regime = ${confirmedToday}<br>
+            Evidence Library Selected = ${lastAligned.regime}<br>
+            Regime Changed Today = ${regimeChangedToday}
+          </div>
+        </details>
+      </div>`;
+  }
+
+  if(lastARow){
+    document.getElementById('engineASummary').innerHTML = `
+      <div>${badgeFor(lastARow.RegimeState)} ${badgeFor(lastARow.Stage,'stage')} ${badgeFor(lastARow.Zone)}</div>
+      <div class="why" style="margin-top:10px">MasterP Score: <strong>${num(lastARow.MasterP,1)}</strong> &nbsp;|&nbsp; Relative Rank: <strong>${lastARow.Relative_Score_Pct}</strong></div>
+    `;
+  }
+  const recentCycles = _bResult.cycles.slice(-10);
+  const recentBlasts = recentCycles.filter(c=>c.type==='Blast').length;
+  document.getElementById('engineBSummary').innerHTML = `
+    <div>Last 10 Cycles: <strong>${recentBlasts} Blast</strong> / <strong>${recentCycles.length-recentBlasts} Miss</strong></div>
+    <div style="margin-top:6px">Evidence Library Size: <strong>${_bResult.finalized.HighSptR.length + _bResult.finalized.LowSptR.length}</strong> patterns tracked across both regimes</div>
+  `;
+
+  if(last){
+    document.getElementById('evidenceSummary').innerHTML = `
+      <div style="font-size:13px;color:var(--text-muted);font-weight:700;text-transform:uppercase;">Historical Similar Setups</div>
+      <div class="big">${last.sampleSize}</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-top:2px">similar historical days</div>
+      <div style="margin-top:14px;font-size:13px;color:var(--text-muted);font-weight:700;text-transform:uppercase;">Blast Rate</div>
+      <div class="big" style="color:${last.historicalBlastRate!==null?probColor(last.historicalBlastRate):'#94a3b8'}">${last.historicalBlastRate!==null?pct(last.historicalBlastRate,1):'—'}</div>
+    `;
+  }
+}
+
+function renderEngineA(){
+  const rows = _aResult.processed.slice(-60);
+  let html = '<tr><th>Date</th><th>Stage</th><th>Zone</th><th>Regime</th><th>MasterP</th><th>Position</th></tr>';
+  rows.forEach(r=>{
+    html += `<tr><td>${r.Date}</td><td>${badgeFor(r.Stage,'stage')}</td><td>${badgeFor(r.Zone)}</td><td>${badgeFor(r.RegimeState)}</td><td>${num(r.MasterP,1)}</td><td>${positionWording(r.Recommended_Allocation)}</td></tr>`;
+  });
+  document.getElementById('tableA').innerHTML = html;
+}
+
+function renderEngineB(){
+  const m = document.getElementById('engineBMetrics');
+  const blasts = _bResult.cycles.filter(c=>c.type==='Blast').length;
+  const misses = _bResult.cycles.filter(c=>c.type==='Miss').length;
+  m.innerHTML = [
+    ['Total Cycles', _bResult.cycles.length],
+    ['Blast Cycles', blasts],
+    ['Miss Cycles', misses],
+    ['Blast Rate', pct(_bResult.cycles.length?blasts/_bResult.cycles.length:0)],
+  ].map(([l,v])=>`<div class="metric"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+
+  const rows = _bResult.cycles.slice(-60);
+  let html = '<tr><th>Anchor Date</th><th>Type</th><th>Regime</th><th>Days To Blast</th><th>Move ATR</th></tr>';
+  rows.forEach(c=>{
+    html += `<tr><td>${c.anchorDate}</td><td><span class="pill ${c.type==='Blast'?'blast':'miss'}">${c.type}</span></td><td>${badgeFor(c.regime)}</td><td>${c.daysToBlast??'—'}</td><td>${num(c.moveATR,2)}</td></tr>`;
+  });
+  document.getElementById('tableB').innerHTML = html;
+}
+
+function renderEngineC(){
+  const rows = _cResult.panel.slice(-60);
+  let html = '<tr><th>Date</th><th>Bucket A</th><th>Bucket B</th><th>Agreement</th><th>Conflict</th><th>Reliability</th><th>Conviction</th></tr>';
+  rows.forEach(p=>{
+    html += `<tr><td>${p.date}</td><td><span class="pill ${pillClass(p.bucketA)}">${p.bucketA??'—'}</span></td><td><span class="pill ${pillClass(p.bucketB)}">${p.bucketB??'—'}</span></td><td>${p.agreement}</td><td>${p.conflict?'<span class="pill conflict">Yes</span>':'No'}</td><td>${p.reliability}</td><td>${num(p.convictionScore,1)}</td></tr>`;
+  });
+  document.getElementById('tableC').innerHTML = html;
+
+  const buckets=['Low','Medium','High'];
+  let mhtml = '<table><tr><th>A \\\\ B</th>'+buckets.map(b=>`<th>${b}</th>`).join('')+'</tr>';
+  buckets.forEach(ba=>{
+    mhtml += `<tr><td>${ba}</td>`;
+    buckets.forEach(bb=>{
+      const c = _cResult.matrix[ba][bb];
+      mhtml += `<td>${c.blastRate!==null?pct(c.blastRate):'—'} (n=${c.n})</td>`;
+    });
+    mhtml += '</tr>';
+  });
+  mhtml += '</table>';
+  document.getElementById('matrixTable').innerHTML = mhtml;
+}
+
+function renderValidation(){
+  const m = document.getElementById('overviewMetrics');
+  const avgConv = _cResult.panel.length ? _cResult.panel.reduce((s,p)=>s+p.convictionScore,0)/_cResult.panel.length : 0;
+  const conflictPct = _cResult.panel.length ? _cResult.panel.filter(p=>p.conflict).length/_cResult.panel.length : 0;
+  m.innerHTML = [
+    ['Clean Rows', _fs.rows.length],
+    ['Engine A Rows', _aResult.processed.length],
+    ['Engine B Cycles', _bResult.cycles.length],
+    ['Aligned Days', _cResult.aligned.length],
+    ['Avg Conviction', num(avgConv,1)],
+    ['Conflict Rate', pct(conflictPct)],
+    ['Brier Score', num(_vResult.calibration.byConvictionScore.brierScore,4)],
+    ['Evidence Lib (H/L)', _bResult.finalized.HighSptR.length+' / '+_bResult.finalized.LowSptR.length],
+  ].map(([l,v])=>`<div class="metric"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+
+  const cal = _vResult.calibration.byConvictionScore;
+  let chtml = '<table><tr><th>Bin</th><th>N</th><th>Avg Score</th><th>Observed Blast Rate</th></tr>';
+  cal.table.forEach(b=>{
+    chtml += `<tr><td>${b.bin}</td><td>${b.n}</td><td>${num(b.avgScore,1)}</td><td>${b.observedBlastRate!==null?pct(b.observedBlastRate):'—'}</td></tr>`;
+  });
+  chtml += '</table>';
+  document.getElementById('calibTable').innerHTML = chtml;
+  document.getElementById('brierStatus').textContent = `Brier Score: ${num(cal.brierScore,4)} (lower is better; 0=perfect, 0.25=coin-flip-level for a 50% base rate) — n=${cal.n}`;
+
+  const err = _vResult.errorAnalysis;
+  let ehtml = '<table><tr><th>Percentile</th><th>Threshold</th><th>TP</th><th>FP</th><th>TN</th><th>FN</th><th>Precision</th><th>Recall</th><th>F1</th></tr>';
+  Object.keys(err).forEach(p=>{
+    const e = err[p]; if(!e) return;
+    ehtml += `<tr><td>${(p*100).toFixed(0)}th</td><td>${num(e.threshold,1)}</td><td>${e.tp}</td><td>${e.fp}</td><td>${e.tn}</td><td>${e.fn}</td><td>${num(e.precision,2)}</td><td>${num(e.recall,2)}</td><td>${num(e.f1,2)}</td></tr>`;
+  });
+  ehtml += '</table>';
+  document.getElementById('errorTable').innerHTML = ehtml;
+
+  const rr = _vResult.regimeReports;
+  let rhtml = '<table><tr><th>Regime</th><th>N</th><th>Blast Rate</th><th>Avg Conviction</th><th>Conflict Rate</th></tr>';
+  Object.keys(rr).forEach(reg=>{
+    const r = rr[reg];
+    rhtml += `<tr><td>${reg}</td><td>${r.n}</td><td>${r.blastRate!==null?pct(r.blastRate):'—'}</td><td>${num(r.avgConvictionScore,1)}</td><td>${r.conflictRate!==null?pct(r.conflictRate):'—'}</td></tr>`;
+  });
+  rhtml += '</table>';
+  document.getElementById('regimeTable').innerHTML = rhtml;
+}
+
+</script>
+</body>
+</html>
