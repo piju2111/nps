@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NPS Research Lab v1.0 — Phase 1: Prediction Archive</title>
+<style>
+:root{--card-bg:#ffffff;--page-bg:#f1f5f9;--border:#e2e8f0;--text-primary:#0f172a;--text-muted:#475569;
+--accent-blue:#2563eb;--accent-green:#16a34a;--accent-amber:#d97706;--accent-red:#dc2626;--accent-purple:#7c3aed;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--page-bg);color:var(--text-primary);font-family:Inter,-apple-system,'Segoe UI',system-ui,sans-serif;font-size:15px;line-height:1.5;padding:16px;letter-spacing:-.01em;}
+.app{max-width:1000px;margin:0 auto;}
+h1{font-size:22px;font-weight:800;}
+.subtitle{color:var(--text-muted);font-size:13px;margin-bottom:18px;}
+.card{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.card h2{font-size:13px;font-weight:800;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;}
+input[type=file],input[type=number],input[type=text]{background:#f8fafc;border:1px solid var(--border);color:var(--text-primary);border-radius:8px;padding:7px 10px;font-size:14px;}
+input[type=number]{width:80px;}
+button{background:var(--accent-blue);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:14px;font-weight:700;cursor:pointer;margin-right:8px;}
+button.secondary{background:#f1f5f9;color:var(--text-muted);border:1px solid var(--border);}
+button:disabled{opacity:.4;cursor:not-allowed;}
+.row{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:8px;}
+label{font-size:13px;color:var(--text-muted);font-weight:600;}
+.progress-track{background:#e2e8f0;border-radius:999px;height:10px;overflow:hidden;margin-top:10px;}
+.progress-fill{height:10px;background:var(--accent-blue);border-radius:999px;transition:width .2s;width:0%;}
+.status{font-size:13px;color:var(--text-muted);margin-top:8px;white-space:pre-wrap;}
+.err{color:var(--accent-red);font-size:13px;margin-top:8px;font-weight:600;}
+.warn{background:#fff7ed;border:1px solid var(--accent-amber);border-radius:10px;padding:10px 14px;font-size:13px;color:#9a3412;margin-top:10px;}
+.grid4{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+@media(min-width:640px){.grid4{grid-template-columns:repeat(4,1fr);}}
+.metric{background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;}
+.metric .v{font-size:22px;font-weight:800;}
+.metric .l{font-size:10px;color:var(--text-muted);text-transform:uppercase;margin-top:4px;font-weight:700;}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;}
+th:first-child,td:first-child{text-align:left;color:var(--text-muted);}
+th{color:var(--text-muted);font-weight:700;font-size:10px;text-transform:uppercase;position:sticky;top:0;background:#fff;}
+.scroll{max-height:420px;overflow:auto;}
+.pill{display:inline-flex;border-radius:999px;font-size:11px;font-weight:800;padding:3px 10px;}
+.pill.blast{background:#fee2e2;color:var(--accent-red);}
+.pill.miss{background:#dcfce7;color:var(--accent-green);}
+.pill.pending{background:#f1f5f9;color:var(--text-muted);}
+.version-tag{display:inline-block;background:#0f172a;color:#fff;font-size:10px;font-weight:800;padding:2px 8px;border-radius:6px;margin-left:6px;vertical-align:middle;}
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>NPS Research Lab<span class="version-tag">v1.0 — Phase 1</span></h1>
+  <div class="subtitle">Prediction Archive &amp; Historical Replay — separate from Engine A / B / C. Never modifies engine math.</div>
+
+  <div class="card">
+    <h2>1 · NIFTY Historical Data</h2>
+    <div class="row">
+      <input type="text" id="csvUrl" style="flex:1;min-width:240px" placeholder="Google Sheets CSV URL"
+        value="https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0WRRoaKlcjrQ6xthFpq5r5n8XQpUSeUg7rsy0zXBUdx46HBacISyimAsIRbGPRYpsvpkUGwLCSJQm/pub?output=csv">
+      <button id="fetchBtn">Fetch Sheet</button>
+      <label>or upload: <input type="file" id="csvFile" accept=".csv"></label>
+    </div>
+    <div class="row">
+      <label>Blast ATR Mult <input type="number" id="threshInput" value="2" step="0.1"></label>
+      <label>Min Evidence Samples <input type="number" id="minSamplesInput" value="5" step="1"></label>
+    </div>
+    <div class="status" id="dataStatus"></div>
+  </div>
+
+  <div class="card">
+    <h2>2 · Existing Prediction Archive (optional — for Incremental Update)</h2>
+    <div class="row">
+      <input type="file" id="archiveFile" accept=".csv">
+      <span class="status" id="archiveStatus" style="margin:0">No existing archive loaded — will run full Historical Replay.</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>3 · Run</h2>
+    <div class="row">
+      <button id="runBtn" disabled>▶ Run Replay / Incremental Update</button>
+      <button id="resumeBtn" class="secondary" style="display:none">⟲ Resume Interrupted Run</button>
+      <button id="restartBtn" class="secondary" style="display:none">✕ Discard Checkpoint &amp; Restart</button>
+      <button id="exportBtn" class="secondary" disabled>⬇ Export PredictionArchive.csv</button>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="status" id="runStatus"></div>
+    <div class="err" id="runErr"></div>
+    <div class="warn" id="resumeWarn" style="display:none"></div>
+  </div>
+
+  <div class="card" id="summaryCard" style="display:none">
+    <h2>4 · Archive Summary</h2>
+    <div class="grid4" id="summaryMetrics"></div>
+  </div>
+
+  <div class="card" id="previewCard" style="display:none">
+    <h2>5 · Preview (last 80 rows)</h2>
+    <div class="scroll"><table id="previewTable"></table></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+// =============================================================================
+// SHARED CORE (verbatim, copied from Engine C's trader_dashboard.html).
+// Research Lab NEVER edits this block. Any bug here must be fixed in the
+// canonical Engine C file first, then re-copied here.
+// =============================================================================
+const MIN_CLEAN_ROWS = 115, LOOKBACK_YEARS = 3, SPIKE_PCT_THRESHOLD = 20;
+
+function cleanDateStr(s){if(!s)return null;s=String(s).replace(/^\ufeff/g,'').replace(/['"]/g,'').trim();if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;let m=s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);if(m){const[,d,mo,y]=m;return y+'-'+mo.padStart(2,'0')+'-'+d.padStart(2,'0');}const dt=new Date(s);if(!isNaN(dt))return dt.toISOString().slice(0,10);return null;}
+function parseCleanNum(s){if(s===null||s===undefined||s==='')return null;const n=parseFloat(String(s).replace(/[, ]/g,''));return isNaN(n)||n<=0?null:n;}
+
+function washRows(rawRows){
+  const rejected={noDate:0,zeroOHLC:0,badHL:0,duplicate:0,spike:0};const seenDates=new Set();let prevClose=null,prevOHLC=null,validRows=[];
+  for(const raw of rawRows){
+    const keyMap={};Object.keys(raw).forEach(k=>{const wk=String(k).replace(/^\ufeff/g,'').trim().toLowerCase();if(['date','open','high','low','close'].includes(wk))keyMap[wk]=raw[k];});
+    const dk=cleanDateStr(keyMap.date);if(!dk){rejected.noDate++;continue;}
+    const o=parseCleanNum(keyMap.open),h=parseCleanNum(keyMap.high),l=parseCleanNum(keyMap.low),c=parseCleanNum(keyMap.close);
+    if(!o||!h||!l||!c){rejected.zeroOHLC++;continue;}
+    if(h<l||c>h||c<l){rejected.badHL++;continue;}
+    if(seenDates.has(dk)){rejected.duplicate++;continue;}seenDates.add(dk);
+    const ohlcKey=`${o}_${h}_${l}_${c}`;if(prevOHLC===ohlcKey){rejected.duplicate++;continue;}prevOHLC=ohlcKey;
+    if(prevClose!==null){const chgPct=Math.abs(c-prevClose)/prevClose*100;if(chgPct>SPIKE_PCT_THRESHOLD){rejected.spike++;prevClose=c;continue;}}
+    prevClose=c;validRows.push({date:dk,open:o,high:h,low:l,close:c});
+  }
+  const cutoff=new Date();cutoff.setFullYear(cutoff.getFullYear()-LOOKBACK_YEARS);const cutoffStr=cutoff.toISOString().slice(0,10);
+  const beforeLB=validRows.length;validRows=validRows.filter(r=>r.date>=cutoffStr);const removedLookback=beforeLB-validRows.length;
+  validRows.sort((a,b)=>new Date(a.date)-new Date(b.date));
+  for(let i=0;i<validRows.length;i++){const curr=validRows[i],prev=i>0?validRows[i-1]:null;curr.TR=prev?Math.max(curr.high-curr.low,Math.abs(curr.high-prev.close),Math.abs(curr.low-prev.close)):curr.high-curr.low;}
+  const report={raw:rawRows.length,clean:validRows.length,dropped:{...rejected,lookback:removedLookback},dateFirst:validRows.length?validRows[0].date:null,dateLast:validRows.length?validRows[validRows.length-1].date:null};
+  if(validRows.length<MIN_CLEAN_ROWS){const err=new Error(`After washing, only ${validRows.length} rows remain (need >= ${MIN_CLEAN_ROWS}).`);err.report=report;throw err;}
+  return {rows:validRows,report};
+}
+
+function atr14(rows,i){if(i<13||i>=rows.length)return null;let sum=0;for(let j=i-13;j<=i;j++)sum+=rows[j].TR;return sum/14;}
+function atrSpot(rows,i){const a=atr14(rows,i);if(a===null)return null;const close=rows[i].close;return close>0?a/close:null;}
+const sharedAtr14=atr14;
+
+function computeAtrSpotP50(rows){const vals=[];for(let i=13;i<rows.length-1;i++){const v=atrSpot(rows,i);if(v!==null)vals.push(v);}vals.sort((a,b)=>a-b);return vals.length?(vals[Math.floor(vals.length*0.5)]??0.007):0.007;}
+function rawRegimeA(rows,i,atrSpotP50){const v=atrSpot(rows,i);if(v===null)return null;return v>=atrSpotP50?'HighSptR':'LowSptR';}
+function buildRegimeSeriesA(rows){
+  const atrSpotP50=computeAtrSpotP50(rows);const raw=new Array(rows.length).fill(null),confirmed=new Array(rows.length).fill(null);
+  for(let i=0;i<rows.length;i++){
+    raw[i]=rawRegimeA(rows,i,atrSpotP50);
+    if(raw[i]===null){confirmed[i]=null;continue;}
+    if(i<3||raw[i-1]===null||raw[i-2]===null){confirmed[i]=raw[i];continue;}
+    if(raw[i]===raw[i-1]&&raw[i-1]===raw[i-2])confirmed[i]=raw[i];else confirmed[i]=confirmed[i-1];
+  }
+  return {raw,confirmed,atrSpotP50};
+}
+function buildCanonicalRegime(rows){return buildRegimeSeriesA(rows);}
+function buildRegimeWithConflictDiagnostics(rows){
+  const canonical=buildRegimeSeriesA(rows);const n=rows.length;
+  return {Regime:canonical.confirmed,RegimeRaw:canonical.raw,atrSpotP50:canonical.atrSpotP50};
+}
+
+function buildFeatureStore(rawRows){
+  const {rows:cleanRows,report}=washRows(rawRows);
+  const regime=buildRegimeWithConflictDiagnostics(cleanRows);
+  const features=cleanRows.map((r,i)=>({idx:i,date:r.date,open:r.open,high:r.high,low:r.low,close:r.close,TR:r.TR,
+    ATR14:atr14(cleanRows,i),ATRSpot:atrSpot(cleanRows,i),Regime:regime.Regime[i],RegimeRaw:regime.RegimeRaw[i]}));
+  return {rows:features,report,atrSpotP50:regime.atrSpotP50};
+}
+
+const NPS_CONFIG={WEIGHTS:{FAST:0.50,MID:1.00,SLOW:0.25,MISS:-0.5},STAND_DOWN_THRESHOLD:0.25};
+const REGIME_KEYS=["HighSptR","LowSptR"],STAGE_KEYS=[4,3,2,1],ZONE_KEYS=["Upper Zone","Middle Zone","Lower Zone"],
+  RRC_KEYS=["Deep","Neutral","Expansion"],WEEKDAY_KEYS=[1,2,3,4,5],BFQ_KEYS=["Normal","Exhausted"],
+  WOM_KEYS=[1,2,3,4,5],ZPATH_KEYS=[0,1,2],ROC_KEYS=[0,1,2];
+function getWeekOfMonth(d){return Math.ceil(new Date(d).getUTCDate()/7);}
+function classifyRRCState(range3,atr,rrcP33,rrcP66){const r=atr>0?range3/atr:1;return r<=rrcP33?"Deep":r<=rrcP66?"Neutral":"Expansion";}
+function computeZPath(rawRows,ai,zph20,zpl20){if(ai<20)return 0;const zR=zph20-zpl20;function dzs(c){if(zR<=0)return 0;const p=(c-zpl20)/zR;return p>=0.66?1:p<=0.33?-1:0;}const sc=[];for(let d=19;d>=0;d--)sc.push(dzs(rawRows[ai-d].Close));const B1=(sc[0]+sc[1]+sc[2]+sc[3]+sc[4])/5,B2=(sc[5]+sc[6]+sc[7]+sc[8]+sc[9])/5,B3=(sc[10]+sc[11]+sc[12]+sc[13]+sc[14])/5,B4=(sc[15]+sc[16]+sc[17]+sc[18]+sc[19])/5;if(B4>=0.3&&B4>=B3&&B3>=B2-0.1&&B4>B1)return 2;if(B4<=-0.3&&B4<=B3&&B3<=B2+0.1&&B4<B1)return 1;return 0;}
+function computeBFQState(rawRows,anchorIdx){if(anchorIdx<20)return"Normal";const atr=rawRows.slice(anchorIdx-13,anchorIdx+1).reduce((a,d)=>a+d.TR,0)/14;let bc=0;for(let s=0;s<7;s++){const e=anchorIdx-s*3,st=e-2;if(st<0)break;const hi=Math.max(rawRows[st].High,rawRows[st+1].High,rawRows[e].High),lo=Math.min(rawRows[st].Low,rawRows[st+1].Low,rawRows[e].Low);if(atr>0&&(hi-lo)>2*atr)bc++;}return bc<=2?"Normal":"Exhausted";}
+function computeRoCGrid(rawRows,anchorIdx,atrVal){if(anchorIdx<16)return 0;const internalScores=[];const threshold=(atrVal/rawRows[anchorIdx].Close)*100*0.5;for(let d=13;d>=0;d--){const idx=anchorIdx-d;const cNow=rawRows[idx].Close,cPrev3=rawRows[idx-3]?rawRows[idx-3].Close:null;if(!cPrev3||cPrev3<=0){internalScores.push(0);continue;}const roc3=((cNow-cPrev3)/cPrev3)*100;if(roc3>=threshold)internalScores.push(1);else if(roc3<=-threshold)internalScores.push(-1);else internalScores.push(0);}const B1=(internalScores[0]+internalScores[1]+internalScores[2]+internalScores[3])/4,B2=(internalScores[4]+internalScores[5]+internalScores[6]+internalScores[7]+internalScores[8]+internalScores[9])/6,B3=(internalScores[10]+internalScores[11]+internalScores[12]+internalScores[13])/4;if(B3>=0.25&&B3>=B2&&B2>=B1)return 2;if(B3<=-0.25||(B1>0.1&&B3<B1-0.5))return 1;return 0;}
+function velocityWeight(bd,hit,velFastCut,velMidCut){if(!hit||bd===0)return NPS_CONFIG.WEIGHTS.MISS;if(bd<=velFastCut)return NPS_CONFIG.WEIGHTS.FAST;if(bd<=velMidCut)return NPS_CONFIG.WEIGHTS.MID;return NPS_CONFIG.WEIGHTS.SLOW;}
+function bucketVelocityScore(outcomes,velFastCut,velMidCut){if(!outcomes.length)return{score:0,pillarScore:0,fast:0,mid:0,slow:0,miss:0,total:0,raw:0};let fast=0,mid=0,slow=0,miss=0,rawScore=0;outcomes.forEach(o=>{let w=velocityWeight(o.blastDay,o.hit,velFastCut,velMidCut);rawScore+=w;if(!o.hit||o.blastDay===0)miss++;else if(o.blastDay<=velFastCut)fast++;else if(o.blastDay<=velMidCut)mid++;else slow++;});const score=rawScore/outcomes.length;return{score,pillarScore:Math.min(100,score*100),fast,mid,slow,miss,total:outcomes.length,raw:rawScore};}
+function getPrecisionWeight(outcomes,velFastCut,velMidCut){const MIN_SAMPLES=5,VARIANCE_FLOOR=0.02;if(!outcomes||outcomes.length<MIN_SAMPLES)return 0;const n=outcomes.length;const scores=outcomes.map(o=>velocityWeight(o.blastDay,o.hit,velFastCut,velMidCut));const mean=scores.reduce((sum,s)=>sum+s,0)/n;const variance=scores.reduce((sum,s)=>sum+Math.pow(s-mean,2),0)/n;return n/Math.max(variance,VARIANCE_FLOOR);}
+function initConditionalStats(){const analyticsStats={conditionalStage:{},conditionalZone:{},conditionalRRC:{},conditionalWeekday:{},conditionalBFQ:{},conditionalWOM:{},conditionalZPath:{},conditionalRoC:{},regime:{"HighSptR":{outcomes:[]},"LowSptR":{outcomes:[]}}};REGIME_KEYS.forEach(r=>{analyticsStats.conditionalStage[r]={};analyticsStats.conditionalZone[r]={};analyticsStats.conditionalRRC[r]={};analyticsStats.conditionalWeekday[r]={};analyticsStats.conditionalBFQ[r]={};analyticsStats.conditionalWOM[r]={};analyticsStats.conditionalZPath[r]={};analyticsStats.conditionalRoC[r]={};STAGE_KEYS.forEach(s=>analyticsStats.conditionalStage[r][s]={outcomes:[]});ZONE_KEYS.forEach(z=>analyticsStats.conditionalZone[r][z]={outcomes:[]});RRC_KEYS.forEach(rrc=>analyticsStats.conditionalRRC[r][rrc]={outcomes:[]});WEEKDAY_KEYS.forEach(wd=>analyticsStats.conditionalWeekday[r][wd]={outcomes:[]});BFQ_KEYS.forEach(bfq=>analyticsStats.conditionalBFQ[r][bfq]={outcomes:[]});WOM_KEYS.forEach(wom=>analyticsStats.conditionalWOM[r][wom]={outcomes:[]});ZPATH_KEYS.forEach(zp=>analyticsStats.conditionalZPath[r][zp]={outcomes:[]});ROC_KEYS.forEach(roc=>analyticsStats.conditionalRoC[r][String(roc)]={outcomes:[]});});return analyticsStats;}
+
+function ProbabilityEngine(stage,zone,regimeState,rrcState,weekday,bfqState,womState,zpathState,rocState,analyticsStats,velFastCut,velMidCut){
+  function pillarShrink(outcomes){if(!outcomes.length)return{pillarScore:0,rawScore:0,lambda:0,vs:bucketVelocityScore([],velFastCut,velMidCut),n:0};const vs=bucketVelocityScore(outcomes,velFastCut,velMidCut);return{pillarScore:Math.min(100,vs.pillarScore),rawScore:vs.pillarScore,lambda:0,vs,n:outcomes.length};}
+  const csOut=((analyticsStats.conditionalStage[regimeState]||{})[stage]||{outcomes:[]}).outcomes;const stagePillar=pillarShrink(csOut);const stageSamples=csOut.length;const stageVS=stagePillar.vs;
+  const czOut=((analyticsStats.conditionalZone[regimeState]||{})[zone]||{outcomes:[]}).outcomes;const zonePillar=pillarShrink(czOut);const zoneSamples=czOut.length;const zoneVS=zonePillar.vs;
+  const rrcKey=rrcState||"Neutral";const crOut=((analyticsStats.conditionalRRC[regimeState]||{})[rrcKey]||{outcomes:[]}).outcomes;const rrcPillar=pillarShrink(crOut);const rrcSamples=crOut.length;const rrcVS=rrcPillar.vs;
+  const wdKey=(weekday!==null&&weekday!==undefined)?weekday:0;const cwOut=(wdKey>=1&&wdKey<=5&&(analyticsStats.conditionalWeekday[regimeState]||{})[wdKey])?analyticsStats.conditionalWeekday[regimeState][wdKey].outcomes:[];const weekdayPillar=pillarShrink(cwOut);const weekdaySamples=cwOut.length;const weekdayVS=weekdayPillar.vs;
+  const bfqKey=bfqState||"Normal";const cbOut=((analyticsStats.conditionalBFQ[regimeState]||{})[bfqKey]||{outcomes:[]}).outcomes;const bfqPillar=pillarShrink(cbOut);const bfqSamples=cbOut.length;const bfqVS=bfqPillar.vs;
+  const womKey=womState||1;const cwomOut=((analyticsStats.conditionalWOM[regimeState]||{})[womKey]||{outcomes:[]}).outcomes;const womPillar=pillarShrink(cwomOut);const womSamples=cwomOut.length;const womVS=womPillar.vs;
+  const zpKey=zpathState!==undefined?zpathState:0;const czpOut=((analyticsStats.conditionalZPath[regimeState]||{})[zpKey]||{outcomes:[]}).outcomes;const zpathPillar=pillarShrink(czpOut);const zpathSamples=czpOut.length;const zpathVS=zpathPillar.vs;
+  const rocKey=String((rocState!==undefined&&rocState!==null)?rocState:0);const crocOut=((analyticsStats.conditionalRoC[regimeState]||{})[rocKey]||{outcomes:[]}).outcomes;const rocPillar=pillarShrink(crocOut);const rocSamples=crocOut.length;const rocVS=rocPillar.vs;
+  const w_stage=getPrecisionWeight(csOut,velFastCut,velMidCut),w_zone=getPrecisionWeight(czOut,velFastCut,velMidCut),w_zpath=getPrecisionWeight(czpOut,velFastCut,velMidCut),w_rrc=getPrecisionWeight(crOut,velFastCut,velMidCut),w_bfq=getPrecisionWeight(cbOut,velFastCut,velMidCut),w_weekday=getPrecisionWeight(cwOut,velFastCut,velMidCut),w_wom=getPrecisionWeight(cwomOut,velFastCut,velMidCut),w_roc=getPrecisionWeight(crocOut,velFastCut,velMidCut);
+  const totalWeight=w_stage+w_zone+w_zpath+w_rrc+w_bfq+w_weekday+w_wom+w_roc;
+  let masterP=50;
+  if(totalWeight>0){masterP=((stagePillar.pillarScore*w_stage)+(zonePillar.pillarScore*w_zone)+(zpathPillar.pillarScore*w_zpath)+(rrcPillar.pillarScore*w_rrc)+(bfqPillar.pillarScore*w_bfq)+(weekdayPillar.pillarScore*w_weekday)+(womPillar.pillarScore*w_wom)+(rocPillar.pillarScore*w_roc))/totalWeight;}
+  const totalN=[csOut,czOut,czpOut,crOut,cwOut,cbOut,cwomOut,crocOut].reduce((sum,arr)=>sum+(arr?arr.length:0),0);
+  const regOutcomes=(analyticsStats.regime[regimeState]||{outcomes:[]}).outcomes;const regimeSamples=regOutcomes.length;
+  return{stageScore:stagePillar.pillarScore,zoneScore:zonePillar.pillarScore,rrcScore:rrcPillar.pillarScore,weekdayScore:weekdayPillar.pillarScore,bfqScore:bfqPillar.pillarScore,womScore:womPillar.pillarScore,zpathScore:zpathPillar.pillarScore,rocScore:rocPillar.pillarScore,masterP,stageVS,zoneVS,rrcVS,weekdayVS,bfqVS,womVS,zpathVS,rocVS,stageSamples,zoneSamples,rrcSamples,weekdaySamples,bfqSamples,womSamples,zpathSamples,rocSamples,regimeSamples,totalN};
+}
+function getDynamicAllocation(score,currentRegime,historicalScoreBounds){const rKey=(currentRegime==="HighSptR"||currentRegime==="LowSptR")?currentRegime:"LowSptR";const mn=historicalScoreBounds[rKey].min,mx=historicalScoreBounds[rKey].max,range=mx-mn;if(range<=0)return{mult:"STAND DOWN",multiplier:0,relPct:0,note:`Degenerate score range for ${rKey}.`};const relPct=Math.max(0,Math.min(1,(score-mn)/range));let threshold=NPS_CONFIG.STAND_DOWN_THRESHOLD;if(rKey==="HighSptR")threshold=0.15;if(rKey==="LowSptR")threshold=0.35;if(relPct<threshold)return{mult:"STAND DOWN",multiplier:0,relPct,note:`Relative score ${(relPct*100).toFixed(1)}% — below adaptive ${rKey} floor.`};const multiplier=parseFloat(relPct.toFixed(2));return{mult:`Max_Limit * ${multiplier.toFixed(2)}`,multiplier,relPct,note:`Score ranks at ${(relPct*100).toFixed(1)}% of local historical ${rKey} range.`};}
+
+function runEngineA(featureStoreRows){
+  const rawRows=featureStoreRows.map(r=>({Date:r.date,computedDateStr:r.date,Open:r.open,High:r.high,Low:r.low,Close:r.close,TR:r.TR,_regimeRaw:r.RegimeRaw,_regime:r.Regime}));
+  if(rawRows.length<115)throw new Error(`Engine A adapter needs >=115 rows, got ${rawRows.length}`);
+  let allBD=[];{let p=100;while(p<rawRows.length-10){const a14=sharedAtr14(rawRows,p-1)??(rawRows.slice(p-14,p).reduce((s,d)=>s+d.TR,0)/14);const ac=rawRows[p-1].Close;let bd=0,hit=0;for(let di=0;p+di<rawRows.length;di++){const fr=rawRows[p+di],mm=Math.max(Math.abs(fr.High-ac),Math.abs(ac-fr.Low));if(a14>0&&mm/a14>=2){bd=di+1;hit=1;break;}}if(hit){allBD.push(bd);p+=bd;}else p++;}}
+  allBD.sort((a,b)=>a-b);let velFastCut=allBD[Math.floor(allBD.length*0.33)]??3,velMidCut=allBD[Math.floor(allBD.length*0.66)]??6;if(velFastCut>=velMidCut){velFastCut=3;velMidCut=6;}
+  let allRRC=[];for(let k=105;k<rawRows.length-10;k++){const ai=k-1;const r3h=Math.max(...rawRows.slice(ai-2,ai+1).map(d=>d.High)),r3l=Math.min(...rawRows.slice(ai-2,ai+1).map(d=>d.Low));const a14=sharedAtr14(rawRows,ai)??1;allRRC.push(a14>0?(r3h-r3l)/a14:1);}
+  allRRC.sort((a,b)=>a-b);let rrcP33=allRRC[Math.floor(allRRC.length*0.33)]??0.4,rrcP66=allRRC[Math.floor(allRRC.length*0.66)]??0.8;if(rrcP33>=rrcP66){rrcP33=0.4;rrcP66=0.8;}
+  let processed=[],dateLookupMap={},i=100;
+  while(i<rawRows.length){
+    const ai=i-1;
+    const h3=Math.max(...rawRows.slice(ai-2,ai+1).map(d=>d.High)),l3=Math.min(...rawRows.slice(ai-2,ai+1).map(d=>d.Low));
+    const ph5=Math.max(...rawRows.slice(ai-7,ai-2).map(d=>d.High)),pl5=Math.min(...rawRows.slice(ai-7,ai-2).map(d=>d.Low));
+    const h5=Math.max(...rawRows.slice(ai-4,ai+1).map(d=>d.High)),l5=Math.min(...rawRows.slice(ai-4,ai+1).map(d=>d.Low));
+    const ph10=Math.max(...rawRows.slice(ai-14,ai-4).map(d=>d.High)),pl10=Math.min(...rawRows.slice(ai-14,ai-4).map(d=>d.Low));
+    const h10=Math.max(...rawRows.slice(ai-9,ai+1).map(d=>d.High)),l10=Math.min(...rawRows.slice(ai-9,ai+1).map(d=>d.Low));
+    const ph20=Math.max(...rawRows.slice(ai-29,ai-9).map(d=>d.High)),pl20=Math.min(...rawRows.slice(ai-29,ai-9).map(d=>d.Low));
+    const zph20=Math.max(...rawRows.slice(ai-20,ai).map(d=>d.High)),zpl20=Math.min(...rawRows.slice(ai-20,ai).map(d=>d.Low));
+    const atr=sharedAtr14(rawRows,ai)??1;
+    const tm=((h3-l3)<(ph5-pl5)?1:0)+((h5-l5)<(ph10-pl10)?1:0)+((h10-l10)<(ph20-pl20)?1:0);
+    const stage=tm===3?4:tm===2?3:tm===1?2:1;
+    const ac=rawRows[ai].Close;const rawRegime=rawRows[ai]._regimeRaw,regimeState=rawRows[ai]._regime;
+    const pos20=(zph20-zpl20)>0?(ac-zpl20)/(zph20-zpl20):0.5;const zone=pos20<=0.33?"Lower Zone":pos20>=0.66?"Upper Zone":"Middle Zone";
+    const rrcState=classifyRRCState(h3-l3,atr,rrcP33,rrcP66);const zpathState=computeZPath(rawRows,ai,zph20,zpl20);const rocState=computeRoCGrid(rawRows,ai,atr);
+    const futureSlice=rawRows.slice(i,i+10);let expHit=0,blastDay=0;const hasFuture=futureSlice.length===10;
+    if(hasFuture){for(let di=0;di<futureSlice.length;di++){const fr=futureSlice[di],mm=Math.max(Math.abs(fr.High-ac),Math.abs(ac-fr.Low));if(atr>0&&mm/atr>=2&&blastDay===0){blastDay=di+1;expHit=1;}}}
+    const dKey=rawRows[i].computedDateStr;
+    const row={Date:dKey,Close:ac,Stage:stage,Zone:zone,RawRegime:rawRegime,RegimeState:regimeState,RRCState:rrcState,BFQState:computeBFQState(rawRows,ai),ZPathState:zpathState,RoCState:rocState,ExpansionHit:expHit,BlastDay:blastDay,VelWeight:hasFuture?velocityWeight(blastDay,expHit,velFastCut,velMidCut):null,HasFutureData:hasFuture};
+    processed.push(row);dateLookupMap[dKey]=row;
+    const adv=hasFuture&&expHit&&blastDay>0?blastDay:hasFuture?10:1;
+    for(let skip=1;skip<adv;skip++){
+      const si=i+skip;if(si>=rawRows.length)break;const sk=rawRows[si].computedDateStr;if(dateLookupMap[sk])continue;
+      const sai=si-1;
+      const sh3=Math.max(...rawRows.slice(sai-2,sai+1).map(d=>d.High)),sl3=Math.min(...rawRows.slice(sai-2,sai+1).map(d=>d.Low));
+      const szph20=Math.max(...rawRows.slice(sai-20,sai).map(d=>d.High)),szpl20=Math.min(...rawRows.slice(sai-20,sai).map(d=>d.Low));
+      const sph5=Math.max(...rawRows.slice(sai-7,sai-2).map(d=>d.High)),spl5=Math.min(...rawRows.slice(sai-7,sai-2).map(d=>d.Low));
+      const sh5=Math.max(...rawRows.slice(sai-4,sai+1).map(d=>d.High)),sl5=Math.min(...rawRows.slice(sai-4,sai+1).map(d=>d.Low));
+      const sph10=Math.max(...rawRows.slice(sai-14,sai-4).map(d=>d.High)),spl10=Math.min(...rawRows.slice(sai-14,sai-4).map(d=>d.Low));
+      const sh10=Math.max(...rawRows.slice(sai-9,sai+1).map(d=>d.High)),sl10=Math.min(...rawRows.slice(sai-9,sai+1).map(d=>d.Low));
+      const sph20=Math.max(...rawRows.slice(sai-29,sai-9).map(d=>d.High)),spl20=Math.min(...rawRows.slice(sai-29,sai-9).map(d=>d.Low));
+      const stm=((sh3-sl3)<(sph5-spl5)?1:0)+((sh5-sl5)<(sph10-spl10)?1:0)+((sh10-sl10)<(sph20-spl20)?1:0);
+      const sS=stm===3?4:stm===2?3:stm===1?2:1;
+      const sAC=rawRows[sai].Close,sPos=(szph20-szpl20)>0?(sAC-szpl20)/(szph20-szpl20):0.5;
+      const sZ=sPos<=0.33?"Lower Zone":sPos>=0.66?"Upper Zone":"Middle Zone";
+      const satr=sharedAtr14(rawRows,sai)??1;
+      const sRRC=classifyRRCState(sh3-sl3,satr,rrcP33,rrcP66),sZPath=computeZPath(rawRows,sai,szph20,szpl20);
+      const sRoCState=computeRoCGrid(rawRows,sai,satr);
+      const sRawRegime=rawRows[sai]._regimeRaw,sRegime=rawRows[sai]._regime;
+      const sRow={Date:sk,Close:sAC,Stage:sS,Zone:sZ,RawRegime:sRawRegime,RegimeState:sRegime,RRCState:sRRC,BFQState:computeBFQState(rawRows,sai),ZPathState:sZPath,RoCState:sRoCState,ExpansionHit:0,BlastDay:0,VelWeight:null,HasFutureData:false};
+      dateLookupMap[sk]=sRow;processed.push(sRow);
+    }
+    i+=adv;
+  }
+  const analyticsStats=initConditionalStats();let j=100;
+  while(j<rawRows.length-10){
+    const ai=j-1;
+    const h3=Math.max(...rawRows.slice(ai-2,ai+1).map(r=>r.High)),l3=Math.min(...rawRows.slice(ai-2,ai+1).map(r=>r.Low));
+    const ph5=Math.max(...rawRows.slice(ai-7,ai-2).map(r=>r.High)),pl5=Math.min(...rawRows.slice(ai-7,ai-2).map(r=>r.Low));
+    const h5=Math.max(...rawRows.slice(ai-4,ai+1).map(r=>r.High)),l5=Math.min(...rawRows.slice(ai-4,ai+1).map(r=>r.Low));
+    const ph10=Math.max(...rawRows.slice(ai-14,ai-4).map(r=>r.High)),pl10=Math.min(...rawRows.slice(ai-14,ai-4).map(r=>r.Low));
+    const h10=Math.max(...rawRows.slice(ai-9,ai+1).map(r=>r.High)),l10=Math.min(...rawRows.slice(ai-9,ai+1).map(r=>r.Low));
+    const ph20=Math.max(...rawRows.slice(ai-29,ai-9).map(r=>r.High)),pl20=Math.min(...rawRows.slice(ai-29,ai-9).map(r=>r.Low));
+    const zph20=Math.max(...rawRows.slice(ai-20,ai).map(r=>r.High)),zpl20=Math.min(...rawRows.slice(ai-20,ai).map(r=>r.Low));
+    const a14=sharedAtr14(rawRows,ai)??1;
+    const tm=((h3-l3)<(ph5-pl5)?1:0)+((h5-l5)<(ph10-pl10)?1:0)+((h10-l10)<(ph20-pl20)?1:0);
+    const stg=tm===3?4:tm===2?3:tm===1?2:1;
+    const ac=rawRows[ai].Close,p20=(zph20-zpl20)>0?(ac-zpl20)/(zph20-zpl20):0.5;
+    const zn=p20<=0.33?"Lower Zone":p20>=0.66?"Upper Zone":"Middle Zone";
+    const _mainRow=dateLookupMap[rawRows[j].computedDateStr];const rs=_mainRow?_mainRow.RegimeState:rawRows[ai]._regime;
+    const rrcJ=classifyRRCState(h3-l3,a14,rrcP33,rrcP66),bfqJ=computeBFQState(rawRows,ai),zpathJ=computeZPath(rawRows,ai,zph20,zpl20);
+    const rocJ=computeRoCGrid(rawRows,ai,a14);
+    let ehj=0,bdj=0;for(let di=0;di<10;di++){const fr=rawRows[j+di];if(!fr)break;const mm=Math.max(Math.abs(fr.High-ac),Math.abs(ac-fr.Low));if(a14>0&&mm/a14>=2&&bdj===0){bdj=di+1;ehj=1;}}
+    const outcome={hit:ehj,blastDay:bdj};
+    const wdJ=new Date(rawRows[j].computedDateStr).getUTCDay(),womJ=getWeekOfMonth(rawRows[j].computedDateStr);
+    if(analyticsStats.regime[rs])analyticsStats.regime[rs].outcomes.push(outcome);
+    if(analyticsStats.conditionalStage[rs]?.[stg])analyticsStats.conditionalStage[rs][stg].outcomes.push(outcome);
+    if(analyticsStats.conditionalZone[rs]?.[zn])analyticsStats.conditionalZone[rs][zn].outcomes.push(outcome);
+    if(rrcJ&&analyticsStats.conditionalRRC[rs]?.[rrcJ])analyticsStats.conditionalRRC[rs][rrcJ].outcomes.push(outcome);
+    if(wdJ>=1&&wdJ<=5&&analyticsStats.conditionalWeekday[rs]?.[wdJ])analyticsStats.conditionalWeekday[rs][wdJ].outcomes.push(outcome);
+    if(bfqJ&&analyticsStats.conditionalBFQ[rs]?.[bfqJ])analyticsStats.conditionalBFQ[rs][bfqJ].outcomes.push(outcome);
+    if(womJ&&analyticsStats.conditionalWOM[rs]?.[womJ])analyticsStats.conditionalWOM[rs][womJ].outcomes.push(outcome);
+    if(analyticsStats.conditionalZPath[rs]?.[zpathJ]!==undefined)analyticsStats.conditionalZPath[rs][zpathJ].outcomes.push(outcome);
+    if(rocJ!==undefined&&rocJ!==null&&analyticsStats.conditionalRoC[rs]?.[rocJ]!==undefined)analyticsStats.conditionalRoC[rs][String(rocJ)].outcomes.push(outcome);
+    j+=ehj?bdj:10;
+  }
+  processed.forEach(row=>{
+    const wd=new Date(row.Date).getUTCDay();
+    const prob=ProbabilityEngine(row.Stage,row.Zone,row.RegimeState,row.RRCState,wd,row.BFQState,getWeekOfMonth(row.Date),row.ZPathState||0,row.RoCState??0,analyticsStats,velFastCut,velMidCut);
+    row.MasterP=prob.masterP;row._prob=prob;
+  });
+  let historicalScoreBounds={"HighSptR":{min:Infinity,max:-Infinity},"LowSptR":{min:Infinity,max:-Infinity}};
+  processed.forEach(row=>{const prob=row._prob;if(prob.regimeSamples<5)return;const rKey=(row.RegimeState==="HighSptR"||row.RegimeState==="LowSptR")?row.RegimeState:"HighSptR";if(prob.masterP<historicalScoreBounds[rKey].min)historicalScoreBounds[rKey].min=prob.masterP;if(prob.masterP>historicalScoreBounds[rKey].max)historicalScoreBounds[rKey].max=prob.masterP;});
+  REGIME_KEYS.forEach(r=>{if(!isFinite(historicalScoreBounds[r].min))historicalScoreBounds[r]={min:0,max:100};});
+  processed.forEach(row=>{const prob=row._prob;const ok=prob.regimeSamples>=5;const band=ok?getDynamicAllocation(prob.masterP,row.RegimeState,historicalScoreBounds):{mult:"STAND DOWN",multiplier:0,relPct:0,note:"Insufficient pillar history."};row.Relative_Score_Pct=ok?(band.relPct*100).toFixed(1)+"%":"—";row.Recommended_Allocation=band.mult;});
+  return {processed,historicalScoreBounds,velFastCut,velMidCut,rrcP33,rrcP66};
+}
+
+const LOOKBACK=9,FORWARD_WINDOW=10,WARMUP_ROWS=100;
+// SYNC FIX: Phase 1 previously had no Regime B implementation at all — its
+// internal Engine B copy read Feature Store's canonical Regime A (same bug
+// found and fixed in Engine C). Added here, verbatim, to match standalone
+// Engine B and the patched Engine C exactly.
+const REGIME_CONFIRM_STREAK=3;
+function rawRegimeB(rows,i){if(i<50)return'HighSptR';let hi=-Infinity,lo=Infinity;for(let j=i-50;j<i;j++){hi=Math.max(hi,rows[j].high);lo=Math.min(lo,rows[j].low);}return rows[i].close>(hi+lo)/2?'HighSptR':'LowSptR';}
+function buildRegimeSeriesB(rows){const n=rows.length;const confirmed=new Array(n);let curConfirmed=null,streakLabel=null,streakCount=0;for(let i=0;i<n;i++){const r=rawRegimeB(rows,i);if(curConfirmed===null){curConfirmed=r;streakLabel=r;streakCount=1;}else if(r===curConfirmed){streakLabel=r;streakCount=1;}else{if(r===streakLabel)streakCount++;else{streakLabel=r;streakCount=1;}if(streakCount>=REGIME_CONFIRM_STREAK){curConfirmed=r;streakCount=0;streakLabel=null;}}confirmed[i]=curConfirmed;}return{confirmed};}
+function senseAtr14(rows,i){if(i<13)return rows[i].high-rows[i].low||1;const slice=rows.slice(i-13,i+1);let sum=0,c=0;for(let j=1;j<slice.length;j++){sum+=slice[j].TR;c++;}return c>0?sum/c:(rows[i].high-rows[i].low||1);}
+function generateCycles(rows,thresh,regimeArr){
+  const cycles=[];let p=WARMUP_ROWS;
+  while(p<rows.length-FORWARD_WINDOW){
+    const a14=rows.slice(p-14,p).reduce((s,d)=>s+d.TR,0)/14;const anchorIdx=p-1;const ac=rows[anchorIdx].close;const anchorRegime=regimeArr[anchorIdx];
+    let blastDay=-1,maxMoveATR=0;
+    for(let di=0;di<FORWARD_WINDOW&&p+di<rows.length;di++){const fr=rows[p+di];const mm=Math.max(Math.abs(fr.high-ac),Math.abs(ac-fr.low));const mmATR=a14>0?mm/a14:0;if(mmATR>maxMoveATR)maxMoveATR=mmATR;if(a14>0&&mmATR>=thresh){blastDay=di;break;}}
+    if(blastDay>=0){const blastIdx=p+blastDay;const blastBar=rows[blastIdx];const moveATR=Math.max(Math.abs(blastBar.high-ac),Math.abs(ac-blastBar.low))/a14;const direction=blastBar.close>=ac?'Up':'Down';cycles.push({anchorIdx,anchorDate:rows[anchorIdx].date,anchorClose:ac,anchorATR14:a14,regime:anchorRegime,type:'Blast',blastIdx,blastDate:blastBar.date,daysToBlast:blastDay+1,direction,moveATR});p=blastIdx+1;}
+    else{cycles.push({anchorIdx,anchorDate:rows[anchorIdx].date,anchorClose:ac,anchorATR14:a14,regime:anchorRegime,type:'Miss',blastIdx:null,blastDate:null,daysToBlast:null,direction:null,moveATR:maxMoveATR});p+=FORWARD_WINDOW;}
+  }
+  return cycles;
+}
+function dailySenseRaw(rows,i){if(i<1)return null;const a=senseAtr14(rows,i);const tr=rows[i].TR;const quietRaw=tr/a;const dirRaw=tr!==0?(rows[i].close-rows[i].open)/tr:0;return{quietRaw,dirRaw};}
+function percentile(arr,p){if(!arr.length)return 0;const sorted=[...arr].sort((a,b)=>a-b);const idx=(p/100)*(sorted.length-1);const lo=Math.floor(idx),hi=Math.ceil(idx);return sorted[lo]+(sorted[hi]-sorted[lo])*(idx-lo);}
+function computeSenseThresholds(rows,regimeArr){const byRegime={HighSptR:{q:[],d:[]},LowSptR:{q:[],d:[]}};for(let i=WARMUP_ROWS;i<rows.length;i++){const raw=dailySenseRaw(rows,i);if(!raw)continue;const reg=regimeArr[i];if(!byRegime[reg])continue;byRegime[reg].q.push(raw.quietRaw);byRegime[reg].d.push(raw.dirRaw);}const thr={};for(const reg of["HighSptR","LowSptR"]){thr[reg]={q_p33:percentile(byRegime[reg].q,33),q_p66:percentile(byRegime[reg].q,66),d_p33:percentile(byRegime[reg].d,33),d_p66:percentile(byRegime[reg].d,66)};}return thr;}
+function labelDay(rows,i,senseThr,regimeArr){const raw=dailySenseRaw(rows,i);if(!raw)return null;const reg=regimeArr[i];const t=senseThr[reg];const qLabel=raw.quietRaw<=t.q_p33?'Quiet':raw.quietRaw>=t.q_p66?'Loud':'Mid';const dLabel=raw.dirRaw>=t.d_p66?'Up':raw.dirRaw<=t.d_p33?'Down':'Range';return{idx:i,quietRaw:raw.quietRaw,dirRaw:raw.dirRaw,qLabel,dLabel,regime:reg};}
+function lookbackLabels(rows,anchorIdx,senseThr,regimeArr){const out=[];for(let d=LOOKBACK;d>=1;d--){const idx=anchorIdx-d;out.push(idx>=1?labelDay(rows,idx,senseThr,regimeArr):null);}return out;}
+function sdKey(dayOffset,label){return `SD:Day-${dayOffset}:${label}`;}
+function streakKey(startOffset,len,label,pillar){return `STK:${pillar}:Day-${startOffset}..-${startOffset-len+1}:${label}x${len}`;}
+function transKey(dayOffset,fromLabel,toLabel,pillar){return `TRN:${pillar}:Day-${dayOffset+1}->Day-${dayOffset}:${fromLabel}->${toLabel}`;}
+function extractEvidenceKeys(labels){const keys=new Set();labels.forEach((lb,idx)=>{if(!lb)return;const dayOffset=LOOKBACK-idx;keys.add(sdKey(dayOffset,lb.qLabel));keys.add(sdKey(dayOffset,lb.dLabel));});for(const len of[2,3]){for(let idx=0;idx+len<=labels.length;idx++){const slice=labels.slice(idx,idx+len);if(slice.some(s=>!s))continue;const startOffset=LOOKBACK-idx;if(slice.every(s=>s.qLabel===slice[0].qLabel))keys.add(streakKey(startOffset,len,slice[0].qLabel,'Q'));if(slice.every(s=>s.dLabel===slice[0].dLabel))keys.add(streakKey(startOffset,len,slice[0].dLabel,'D'));}}for(let idx=1;idx<labels.length;idx++){const prev=labels[idx-1],curr=labels[idx];if(!prev||!curr)continue;const dayOffset=LOOKBACK-idx;if(prev.qLabel!==curr.qLabel)keys.add(transKey(dayOffset,prev.qLabel,curr.qLabel,'Q'));if(prev.dLabel!==curr.dLabel)keys.add(transKey(dayOffset,prev.dLabel,curr.dLabel,'D'));}return keys;}
+function buildEvidenceLibrary(cycles,senseThr,rows,regimeArr){const library={HighSptR:new Map(),LowSptR:new Map()};function bump(map,key,isBlast){if(!map.has(key))map.set(key,{blastCount:0,missCount:0});const e=map.get(key);if(isBlast)e.blastCount++;else e.missCount++;}for(const c of cycles){if(c.anchorIdx<LOOKBACK+1)continue;const labels=lookbackLabels(rows,c.anchorIdx,senseThr,regimeArr);const keys=extractEvidenceKeys(labels);const map=library[c.regime];if(!map)continue;const isBlast=c.type==='Blast';keys.forEach(k=>bump(map,k,isBlast));}return library;}
+function computeLR(blastCount,missCount,totalBlast,totalMiss){const pBlast=(blastCount+1)/(totalBlast+1);const pMiss=(missCount+1)/(totalMiss+1);return pBlast/pMiss;}
+function finalizeLibrary(library,cycles,minSamples){const totals={HighSptR:{blast:0,miss:0},LowSptR:{blast:0,miss:0}};cycles.forEach(c=>{if(c.type==='Blast')totals[c.regime].blast++;else totals[c.regime].miss++;});const finalized={HighSptR:[],LowSptR:[]};for(const regime of["HighSptR","LowSptR"]){const tot=totals[regime];library[regime].forEach((counts,key)=>{const sample=counts.blastCount+counts.missCount;if(sample<minSamples)return;const lr=computeLR(counts.blastCount,counts.missCount,tot.blast,tot.miss);finalized[regime].push(Object.freeze({key,blastCount:counts.blastCount,missCount:counts.missCount,sample,lr,logLR:Math.log(lr)}));});finalized[regime].sort((a,b)=>b.lr-a.lr);Object.freeze(finalized[regime]);}Object.freeze(finalized);return{finalized,totals};}
+function computeBRI(liveLabels,finalizedRegimeList){const lookup=new Map(finalizedRegimeList.map(e=>[e.key,e]));const liveKeys=extractEvidenceKeys(liveLabels);const active=[];let logSum=0;liveKeys.forEach(k=>{const e=lookup.get(k);if(!e)return;logSum+=e.logLR;active.push(e);});const bri=100/(1+Math.exp(-logSum));const positiveAll=active.filter(e=>e.lr>1).sort((a,b)=>b.lr-a.lr);const negativeAll=active.filter(e=>e.lr<1).sort((a,b)=>a.lr-b.lr);return{bri,logSum,activeCount:active.length,positive:positiveAll.slice(0,5),negative:negativeAll.slice(0,5),positiveCount:positiveAll.length,negativeCount:negativeAll.length};}
+function runEngineB(featureStoreRows,thresh=2,minSamples=5){
+  if(featureStoreRows.length<WARMUP_ROWS+FORWARD_WINDOW)throw new Error(`Engine B adapter needs >= ${WARMUP_ROWS+FORWARD_WINDOW} rows, got ${featureStoreRows.length}`);
+  const rows=featureStoreRows;
+  // SYNC FIX: own Regime B series (not Feature Store's canonical Regime A),
+  // matching standalone Engine B and the patched Engine C exactly.
+  const regimeBSeries=buildRegimeSeriesB(rows);const regimeArr=regimeBSeries.confirmed;
+  const cycles=generateCycles(rows,thresh,regimeArr);const senseThr=computeSenseThresholds(rows,regimeArr);const library=buildEvidenceLibrary(cycles,senseThr,rows,regimeArr);const{finalized,totals}=finalizeLibrary(library,cycles,minSamples);
+  return{cycles,senseThr,library,finalized,totals,regimeB:regimeBSeries};
+}
+
+function alignEngines(featureStoreRows,engineAResult,engineBResult){
+  const rowByDate=new Map(featureStoreRows.map((r,idx)=>[r.date,idx]));const aligned=[];
+  for(const aRow of engineAResult.processed){
+    const idx=rowByDate.get(aRow.Date);if(idx===undefined||idx<10)continue;
+    // FIX 1 (historical alignment, approved): regime/evidence anchored at idx-1
+    // (Engine A's own ai), matching standalone Engine B's cycle-anchor convention.
+    // FIX 2 (live-row, approved): the single most-recent row uses standalone's
+    // live-signal convention instead (virtual anchor = idx+1, today = Day -1).
+    const isLiveRow = (idx === featureStoreRows.length - 1);
+    const regime=engineBResult.regimeB.confirmed[isLiveRow ? idx : idx - 1];if(!regime||!engineBResult.finalized[regime])continue;
+    const anchorIdx = isLiveRow ? idx + 1 : idx - 1;
+    const labels=lookbackLabels(featureStoreRows,anchorIdx,engineBResult.senseThr,engineBResult.regimeB.confirmed);const bri=computeBRI(labels,engineBResult.finalized[regime]);
+    aligned.push({date:aRow.Date,idx,regime,A:{masterP:aRow.MasterP,relPct:parseFloat(aRow.Relative_Score_Pct)||0,allocation:aRow.Recommended_Allocation},B:{bri:bri.bri,logSum:bri.logSum,activeCount:bri.activeCount,positiveCount:bri.positiveCount,negativeCount:bri.negativeCount},outcome:{hit:aRow.ExpansionHit,blastDay:aRow.BlastDay,hasFuture:aRow.HasFutureData}});
+  }
+  return aligned;
+}
+function computeTercileCuts(values){const v=values.filter(x=>x!==null&&x!==undefined&&!isNaN(x)).sort((a,b)=>a-b);if(!v.length)return{p33:0,p66:0};return{p33:v[Math.floor(v.length*0.33)],p66:v[Math.floor(v.length*0.66)]};}
+function bucketize(value,cuts){if(value===null||value===undefined||isNaN(value))return null;return value<=cuts.p33?'Low':value>=cuts.p66?'High':'Medium';}
+const AGREEMENT_ORDER={Low:0,Medium:1,High:2};
+function agreementDetector(bucketA,bucketB){if(bucketA===null||bucketB===null)return{label:'Unknown',distance:null};const dist=Math.abs(AGREEMENT_ORDER[bucketA]-AGREEMENT_ORDER[bucketB]);const label=dist===0?'Excellent':dist===1?'Moderate':'Weak';return{label,distance:dist};}
+function conflictDetector(bucketA,bucketB){if(bucketA===null||bucketB===null)return{isConflict:false,explanation:'Insufficient data.'};if(bucketA==='High'&&bucketB==='Low')return{isConflict:true,explanation:'Engine A sees strength while Engine B sees weak historical evidence.'};if(bucketA==='Low'&&bucketB==='High')return{isConflict:true,explanation:'Engine B sees strong historical evidence while Engine A is weak.'};return{isConflict:false,explanation:'No material conflict.'};}
+function buildDecisionMatrix(aligned,cutsA,cutsB){const buckets=['Low','Medium','High'];const matrix={};buckets.forEach(ba=>{matrix[ba]={};buckets.forEach(bb=>{matrix[ba][bb]={n:0,blasts:0};});});for(const row of aligned){if(!row.outcome.hasFuture)continue;const ba=bucketize(row.A.relPct,cutsA),bb=bucketize(row.B.bri,cutsB);if(!ba||!bb)continue;matrix[ba][bb].n++;if(row.outcome.hit)matrix[ba][bb].blasts++;}buckets.forEach(ba=>buckets.forEach(bb=>{const c=matrix[ba][bb];c.blastRate=c.n?c.blasts/c.n:null;}));return matrix;}
+function computeReliability(matrix,cellN,activeCount,agreementLabel){const allN=[];Object.values(matrix).forEach(row=>Object.values(row).forEach(c=>allN.push(c.n)));const nCuts=computeTercileCuts(allN);const nBucket=bucketize(cellN,nCuts)||'Low';let score=({Low:0,Medium:1,High:2}[nBucket])+({Weak:0,Moderate:1,Excellent:2}[agreementLabel]??0);if(activeCount>=5)score+=1;if(score<=1)return'Low';if(score<=3)return'Medium';if(score<=4)return'High';return'Very High';}
+function bayesianFusion(priorProb,logSumB){const p=Math.min(0.999,Math.max(0.001,priorProb));const priorOdds=p/(1-p);const likelihoodRatio=Math.exp(logSumB);const posteriorOdds=priorOdds*likelihoodRatio;const posteriorProb=posteriorOdds/(1+posteriorOdds);return{priorProb:p,likelihoodRatio,posteriorProb};}
+const RELIABILITY_WEIGHT={Low:0.4,Medium:0.65,High:0.85,'Very High':1.0};
+function convictionScore(posteriorProb,reliabilityBucket){const w=RELIABILITY_WEIGHT[reliabilityBucket]??0.4;const raw=posteriorProb*100;return raw*w+50*(1-w);}
+function runEngineC(featureStoreRows,engineAResult,engineBResult){
+  const aligned=alignEngines(featureStoreRows,engineAResult,engineBResult);
+  const cutsA=computeTercileCuts(aligned.map(r=>r.A.relPct)),cutsB=computeTercileCuts(aligned.map(r=>r.B.bri));
+  const matrix=buildDecisionMatrix(aligned,cutsA,cutsB);
+  const panel=aligned.map(row=>{
+    const ba=bucketize(row.A.relPct,cutsA),bb=bucketize(row.B.bri,cutsB);
+    const agreement=agreementDetector(ba,bb);const conflict=conflictDetector(ba,bb);
+    const cell=(ba&&bb)?matrix[ba][bb]:{n:0,blastRate:null};
+    const reliability=computeReliability(matrix,cell.n,row.B.activeCount,agreement.label);
+    const prior=cell.blastRate!==null?cell.blastRate:0.5;const fusion=bayesianFusion(prior,row.B.logSum);
+    const conviction=convictionScore(fusion.posteriorProb,reliability);
+    return{date:row.date,idx:row.idx,regime:row.regime,bucketA:ba,bucketB:bb,agreement:agreement.label,conflict:conflict.isConflict,
+      historicalBlastRate:cell.blastRate,sampleSize:cell.n,reliability,priorProb:fusion.priorProb,likelihoodRatio:fusion.likelihoodRatio,
+      posteriorProb:fusion.posteriorProb,convictionScore:conviction,A:row.A,B:row.B,outcome:row.outcome};
+  });
+  return{aligned,cutsA,cutsB,matrix,panel};
+}
+
+// =============================================================================
+// RESEARCH LAB — PHASE 1 (new code, lives only here, never touches engines above)
+// =============================================================================
+const ENGINE_A_VERSION="Engine A v24 (8-Pillar Precision-Weighted MasterP)";
+const ENGINE_B_VERSION="Engine B v6.1 (Evidence Library + BRI)";
+const ENGINE_C_VERSION="Engine C v1.0 RC (Bayesian Fusion)";
+const RESEARCH_LAB_VERSION="Research Lab v1.0 (Phase 1)";
+const ARCHIVE_HEADERS_BASE=["Prediction Date","Engine A Version","Engine B Version","Engine C Version","Engine A Quality",
+  "Engine B BRI","Agreement","Reliability","Conviction","Blast Probability","Suggested Position",
+  "Historical Similar Days","Historical Blast Rate","Final Decision","Actual Blast","Days to Blast",
+  "Max ATR Move","Correct / Incorrect","Audit Status","Notes"];
+// New columns (this update): persist decision-time metrics that Engine C already computes
+// and displays but Phase 1 previously discarded after building the row. No new math —
+// every value below already exists somewhere in aRow / p (the Engine C panel entry) /
+// aRow._prob before this change; this only adds them to the CSV.
+const ARCHIVE_HEADERS_EXTRA=["Regime","Stage","Zone","ZPath State","RRC State","BFQ State","RoC State",
+  "Master P Score","Bucket A","Bucket B","Prior Probability","Likelihood Ratio","Log Likelihood Sum",
+  "Evidence Active Count","Evidence Positive Count","Evidence Negative Count","Engine A Pillar Scores"];
+const ARCHIVE_HEADERS=[...ARCHIVE_HEADERS_BASE, ...ARCHIVE_HEADERS_EXTRA];
+
+// Compact "S:.. Z:.. ZP:.. RRC:.. Wd:.. BFQ:.. WOM:.. RC:.." string — same per-pillar
+// velocity-weighted scores (0-100) Engine A's ProbabilityEngine already computes and
+// keeps on row._prob; just formatted for a single CSV cell instead of being discarded.
+function formatPillarScores(prob){
+  if(!prob) return '';
+  const f=v=>(v===undefined||v===null||isNaN(v))?'—':v.toFixed(1);
+  return `S:${f(prob.stageScore)} Z:${f(prob.zoneScore)} ZP:${f(prob.zpathScore)} RRC:${f(prob.rrcScore)} `+
+         `Wd:${f(prob.weekdayScore)} BFQ:${f(prob.bfqScore)} WOM:${f(prob.womScore)} RC:${f(prob.rocScore)}`;
+}
+
+// Max ATR move over the forward 10-day window — presentation/reporting only,
+// same formula Engine A already uses internally for ExpansionHit, just exposed.
+function computeMaxATRMoveForward(featureStoreRows, idx){
+  const anchor=featureStoreRows[idx];const atr=anchor.ATR14;if(!atr||atr<=0)return null;
+  let maxMove=0;
+  for(let d=1; d<=10 && idx+d<featureStoreRows.length; d++){
+    const fr=featureStoreRows[idx+d];
+    const mm=Math.max(Math.abs(fr.high-anchor.close),Math.abs(anchor.close-fr.low))/atr;
+    if(mm>maxMove)maxMove=mm;
+  }
+  return maxMove;
+}
+function finalDecisionFor(allocation, conviction){
+  if(allocation==='STAND DOWN')return'AVOID (Stand Down)';
+  if(conviction>=66)return'HIGH CONVICTION ENTRY';
+  if(conviction>=33)return'ENTER (Moderate)';
+  return'AVOID (Low Conviction)';
+}
+
+function csvEscape(v){ if(v===null||v===undefined)return''; const s=String(v); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; }
+function simpleCsvParse(text){
+  const lines=text.trim().split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<2)return[];
+  const header=lines[0].split(',').map(h=>h.trim().replace(/^"|"$/g,''));
+  const out=[];
+  for(let i=1;i<lines.length;i++){
+    // basic CSV split honoring quoted commas
+    const cols=[];let cur='',inQ=false;
+    for(const ch of lines[i]){ if(ch==='"'){inQ=!inQ;} else if(ch===','&&!inQ){cols.push(cur);cur='';} else cur+=ch; }
+    cols.push(cur);
+    const obj={};header.forEach((h,idx)=>obj[h]=(cols[idx]||'').replace(/^"|"$/g,''));
+    out.push(obj);
+  }
+  return out;
+}
+
+// ---- App state ----
+let _rawRows=null, _fs=null, _aResult=null, _bResult=null, _cResult=null;
+let _existingDates=new Set(); // dates already present in an uploaded archive
+let _existingArchiveRows=[]; // full parsed rows from an uploaded archive (kept for merge on export)
+let _existingArchiveHeaders=[]; // original header order of that uploaded archive
+let _archiveRowsOut=[]; // new rows built this run
+const CKPT_KEY='nps_research_lab_checkpoint_v1';
+
+function dataFingerprint(){
+  if(!_fs) return null;
+  const first=_fs.rows[0]?.date, last=_fs.rows[_fs.rows.length-1]?.date;
+  const th=document.getElementById('threshInput').value, ms=document.getElementById('minSamplesInput').value;
+  const ax=_existingArchiveRows.length ? `${_existingArchiveRows.length}|${_existingArchiveRows[0]['Prediction Date']}` : 'none';
+  return `${_fs.rows.length}|${first}|${last}|${th}|${ms}|${ax}`;
+}
+function saveCheckpoint(nextIndex){
+  try{
+    localStorage.setItem(CKPT_KEY, JSON.stringify({
+      fp: dataFingerprint(), nextIndex, rows: _archiveRowsOut, ts: Date.now()
+    }));
+  }catch(e){ /* storage full — resumability degrades gracefully, run continues */ }
+}
+function clearCheckpoint(){ try{ localStorage.removeItem(CKPT_KEY); }catch(e){} }
+function loadCheckpoint(){
+  try{ const raw=localStorage.getItem(CKPT_KEY); return raw?JSON.parse(raw):null; }catch(e){ return null; }
+}
+
+// ---- Data loading ----
+function fetchWithTimeout(url,opts,ms){return Promise.race([fetch(url,opts||{}),new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout')),ms))]);}
+document.getElementById('fetchBtn').addEventListener('click', async ()=>{
+  const url=document.getElementById('csvUrl').value.trim(); if(!url)return;
+  const st=document.getElementById('dataStatus'); st.textContent='Fetching...';
+  try{
+    const bust=(url.indexOf('?')!==-1?'&':'?')+'_cb='+Date.now();
+    const res=await fetchWithTimeout(url+bust,{cache:'no-store'},8000);
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const text=await res.text();
+    loadDataFromCsvText(text,'Google Sheets');
+  }catch(err){ st.textContent='Fetch failed: '+err.message+' — try uploading a CSV file instead.'; }
+});
+document.getElementById('csvFile').addEventListener('change', e=>{
+  const file=e.target.files[0]; if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>loadDataFromCsvText(ev.target.result,'Local Upload');
+  reader.readAsText(file);
+});
+function loadDataFromCsvText(text, sourceLabel){
+  const st=document.getElementById('dataStatus');
+  try{
+    const rows=simpleCsvParse(text);
+    _rawRows=rows;
+    _fs=buildFeatureStore(_rawRows);
+    st.textContent=`Loaded (${sourceLabel}): ${_fs.rows.length} clean rows, ${_fs.rows[0].date} → ${_fs.rows[_fs.rows.length-1].date}.`;
+    document.getElementById('runBtn').disabled=false;
+    checkForResumableCheckpoint();
+  }catch(err){ st.textContent='Error: '+err.message; }
+}
+
+function parseCsvWithHeaders(text){
+  const lines=text.trim().split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<2) return {headers:[], rows:[]};
+  const headers=lines[0].split(',').map(h=>h.trim().replace(/^"|"$/g,''));
+  const rows=[];
+  for(let i=1;i<lines.length;i++){
+    const cols=[]; let cur='', inQ=false;
+    for(const ch of lines[i]){ if(ch==='"'){inQ=!inQ;} else if(ch===','&&!inQ){cols.push(cur);cur='';} else cur+=ch; }
+    cols.push(cur);
+    const obj={}; headers.forEach((h,idx)=>obj[h]=(cols[idx]??'').replace(/^"|"$/g,''));
+    rows.push(obj);
+  }
+  return {headers, rows};
+}
+document.getElementById('archiveFile').addEventListener('change', e=>{
+  const file=e.target.files[0]; if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const {headers, rows:parsed}=parseCsvWithHeaders(ev.target.result);
+      _existingArchiveHeaders=headers;
+      _existingArchiveRows=parsed;
+      _existingDates=new Set(parsed.map(r=>r['Prediction Date']).filter(Boolean));
+      let maxDate = [..._existingDates].sort().pop() || '—';
+      const missingNewCols = ARCHIVE_HEADERS_EXTRA.filter(h=>!headers.includes(h));
+      document.getElementById('archiveStatus').textContent=
+        `Loaded existing archive: ${_existingDates.size} predictions, latest date ${maxDate}. Incremental mode — only newer dates will be added.`+
+        (missingNewCols.length ? ` This older archive is missing ${missingNewCols.length} newly added column(s) — those cells will be left blank for its existing rows on export.` : '');
+    }catch(err){ document.getElementById('archiveStatus').textContent='Error reading archive: '+err.message; }
+  };
+  reader.readAsText(file);
+});
+
+// ---- Resume handling ----
+function checkForResumableCheckpoint(){
+  const ck=loadCheckpoint();
+  const fp=dataFingerprint();
+  const resumeBtn=document.getElementById('resumeBtn'), restartBtn=document.getElementById('restartBtn'), warn=document.getElementById('resumeWarn');
+  if(ck && ck.fp===fp && ck.nextIndex>0){
+    resumeBtn.style.display='inline-block'; restartBtn.style.display='inline-block';
+    warn.style.display='block';
+    warn.textContent=`⚠ Found an interrupted run for this exact dataset/config: ${ck.nextIndex} predictions already built and saved locally. Click "Resume" to continue, or "Discard" to start fresh.`;
+  } else {
+    resumeBtn.style.display='none'; restartBtn.style.display='none'; warn.style.display='none';
+  }
+}
+document.getElementById('resumeBtn').addEventListener('click', ()=>runReplay(true));
+document.getElementById('restartBtn').addEventListener('click', ()=>{ clearCheckpoint(); checkForResumableCheckpoint(); });
+
+// ---- Main run ----
+document.getElementById('runBtn').addEventListener('click', ()=>runReplay(false));
+
+async function runReplay(resume){
+  const runErr=document.getElementById('runErr'), runStatus=document.getElementById('runStatus');
+  const runBtn=document.getElementById('runBtn'), resumeBtn=document.getElementById('resumeBtn');
+  runErr.textContent=''; runBtn.disabled=true; resumeBtn.disabled=true;
+  try{
+    const thresh=parseFloat(document.getElementById('threshInput').value)||2;
+    const minSamples=parseInt(document.getElementById('minSamplesInput').value)||5;
+
+    runStatus.textContent='Running Engine A (frozen)...';
+    await sleep(0);
+    _aResult=runEngineA(_fs.rows);
+    runStatus.textContent+=` done (${_aResult.processed.length} rows). Running Engine B (frozen)...`;
+    await sleep(0);
+    _bResult=runEngineB(_fs.rows, thresh, minSamples);
+    runStatus.textContent+=` done (${_bResult.cycles.length} cycles). Running Engine C (frozen)...`;
+    await sleep(0);
+    _cResult=runEngineC(_fs.rows, _aResult, _bResult);
+    runStatus.textContent+=` done (${_cResult.panel.length} aligned days).`;
+
+    let startIndex=0;
+    if(resume){
+      const ck=loadCheckpoint();
+      if(ck && ck.fp===dataFingerprint()){ _archiveRowsOut=ck.rows||[]; startIndex=ck.nextIndex||0; }
+    } else {
+      _archiveRowsOut=[];
+      startIndex=0;
+      clearCheckpoint();
+    }
+
+    const panel=_cResult.panel;
+    const CHUNK=200;
+    let i=startIndex;
+
+    function step(){
+      const end=Math.min(i+CHUNK, panel.length);
+      for(; i<end; i++){
+        const p=panel[i];
+        if(_existingDates.has(p.date)) continue; // dedupe against loaded archive
+        const aRow=_aResult.processed.find(r=>r.Date===p.date); // small n per chunk, acceptable
+        const maxMove=computeMaxATRMoveForward(_fs.rows, p.idx);
+        const hasFuture=p.outcome.hasFuture;
+        const actualBlast = hasFuture ? (p.outcome.hit ? 1 : 0) : '';
+        const predictedBlast = p.posteriorProb>=0.5 ? 1 : 0;
+        const correct = hasFuture ? (predictedBlast===p.outcome.hit ? 'Correct':'Incorrect') : '';
+        const finalDecision = finalDecisionFor(aRow?aRow.Recommended_Allocation:'STAND DOWN', p.convictionScore);
+        _archiveRowsOut.push({
+          "Prediction Date": p.date,
+          "Engine A Version": ENGINE_A_VERSION,
+          "Engine B Version": ENGINE_B_VERSION,
+          "Engine C Version": ENGINE_C_VERSION,
+          "Engine A Quality": (p.A.relPct).toFixed(1)+'%',
+          "Engine B BRI": p.B.bri.toFixed(1),
+          "Agreement": p.agreement,
+          "Reliability": p.reliability,
+          "Conviction": p.convictionScore.toFixed(1),
+          "Blast Probability": (p.posteriorProb*100).toFixed(1)+'%',
+          "Suggested Position": aRow ? aRow.Recommended_Allocation : '—',
+          "Historical Similar Days": p.sampleSize,
+          "Historical Blast Rate": p.historicalBlastRate!==null ? (p.historicalBlastRate*100).toFixed(1)+'%' : '—',
+          "Final Decision": finalDecision,
+          "Actual Blast": actualBlast,
+          "Days to Blast": hasFuture && p.outcome.blastDay ? p.outcome.blastDay : '',
+          "Max ATR Move": maxMove!==null ? maxMove.toFixed(2) : '',
+          "Correct / Incorrect": correct,
+          "Audit Status": hasFuture ? 'Validated' : 'Pending (forward window incomplete)',
+          "Notes": '',
+          // --- newly persisted fields: all already computed above/in aRow/aRow._prob, no new math ---
+          "Regime": p.regime || '',
+          "Stage": aRow ? aRow.Stage : '',
+          "Zone": aRow ? aRow.Zone : '',
+          "ZPath State": aRow ? aRow.ZPathState : '',
+          "RRC State": aRow ? aRow.RRCState : '',
+          "BFQ State": aRow ? aRow.BFQState : '',
+          "RoC State": aRow ? aRow.RoCState : '',
+          "Master P Score": aRow ? aRow.MasterP.toFixed(2) : (typeof p.A.masterP==='number'?p.A.masterP.toFixed(2):''),
+          "Bucket A": p.bucketA || '',
+          "Bucket B": p.bucketB || '',
+          "Prior Probability": (p.priorProb*100).toFixed(1)+'%',
+          "Likelihood Ratio": p.likelihoodRatio.toFixed(3),
+          "Log Likelihood Sum": p.B.logSum.toFixed(4),
+          "Evidence Active Count": p.B.activeCount,
+          "Evidence Positive Count": p.B.positiveCount ?? '',
+          "Evidence Negative Count": p.B.negativeCount ?? '',
+          "Engine A Pillar Scores": aRow && aRow._prob ? formatPillarScores(aRow._prob) : ''
+        });
+      }
+      const pct = panel.length ? Math.round((i/panel.length)*100) : 100;
+      document.getElementById('progressFill').style.width = pct+'%';
+      runStatus.textContent = `Building archive rows: ${i} / ${panel.length} (${_archiveRowsOut.length} new predictions so far)`;
+      saveCheckpoint(i); // checkpoint after every chunk — safe to interrupt/reload from here
+
+      if(i<panel.length){
+        setTimeout(step, 0);
+      } else {
+        finishRun();
+      }
+    }
+    step();
+  }catch(err){
+    runErr.textContent='Error: '+err.message;
+    runBtn.disabled=false; resumeBtn.disabled=false;
+    console.error(err);
+  }
+}
+function sleep(ms){ return new Promise(res=>setTimeout(res,ms)); }
+
+function finishRun(){
+  const mergeNote = _existingArchiveRows.length ? ` Export will merge these with the ${_existingArchiveRows.length} existing archive rows into one file.` : '';
+  document.getElementById('runStatus').textContent =
+    `Done. ${_archiveRowsOut.length} new prediction rows ready (existing archive entries skipped as duplicates).`+mergeNote;
+  document.getElementById('runBtn').disabled=false;
+  document.getElementById('resumeBtn').disabled=false;
+  document.getElementById('exportBtn').disabled = (_archiveRowsOut.length===0 && _existingArchiveRows.length===0);
+  clearCheckpoint();
+  document.getElementById('resumeBtn').style.display='none';
+  document.getElementById('restartBtn').style.display='none';
+  document.getElementById('resumeWarn').style.display='none';
+  renderSummary();
+  renderPreview();
+}
+
+function renderSummary(){
+  const card=document.getElementById('summaryCard'); card.style.display='block';
+  const validated=_archiveRowsOut.filter(r=>r['Audit Status']==='Validated');
+  const correct=validated.filter(r=>r['Correct / Incorrect']==='Correct').length;
+  const blastRate = validated.length ? validated.filter(r=>r['Actual Blast']===1).length/validated.length : null;
+  document.getElementById('summaryMetrics').innerHTML=[
+    ['New Predictions', _archiveRowsOut.length],
+    ['Validated (has outcome)', validated.length],
+    ['Accuracy', validated.length? (correct/validated.length*100).toFixed(1)+'%':'—'],
+    ['Actual Blast Rate', blastRate!==null? (blastRate*100).toFixed(1)+'%':'—'],
+  ].map(([l,v])=>`<div class="metric"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+}
+function renderPreview(){
+  const card=document.getElementById('previewCard'); card.style.display='block';
+  const rows=_archiveRowsOut.slice(-80);
+  let html='<tr>'+ARCHIVE_HEADERS.slice(0,10).map(h=>`<th>${h}</th>`).join('')+'</tr>';
+  rows.forEach(r=>{
+    const pillClass = r['Actual Blast']===1?'blast':r['Actual Blast']===0?'miss':'pending';
+    const pillLabel = r['Actual Blast']===1?'Blast':r['Actual Blast']===0?'Miss':'Pending';
+    html+='<tr>'+
+      `<td>${r['Prediction Date']}</td><td>${r['Engine A Quality']}</td><td>${r['Engine B BRI']}</td>`+
+      `<td>${r['Agreement']}</td><td>${r['Reliability']}</td><td>${r['Conviction']}</td>`+
+      `<td>${r['Blast Probability']}</td><td>${r['Suggested Position']}</td>`+
+      `<td>${r['Historical Similar Days']}</td><td><span class="pill ${pillClass}">${pillLabel}</span></td>`+
+    '</tr>';
+  });
+  document.getElementById('previewTable').innerHTML=html;
+}
+
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  // Unified header = existing archive's own header order (if one was loaded) plus any
+  // columns it's missing, appended at the end. Backward compatible: an older archive's
+  // rows simply get '' for columns that didn't exist when they were written.
+  const unifiedHeaders = _existingArchiveHeaders.length
+    ? [..._existingArchiveHeaders, ...ARCHIVE_HEADERS.filter(h=>!_existingArchiveHeaders.includes(h))]
+    : [...ARCHIVE_HEADERS];
+
+  const mergedRows = [..._existingArchiveRows, ..._archiveRowsOut]
+    .sort((a,b)=> (a['Prediction Date']<b['Prediction Date']?-1:a['Prediction Date']>b['Prediction Date']?1:0));
+
+  const lines=[unifiedHeaders.map(csvEscape).join(',')];
+  mergedRows.forEach(r=>{ lines.push(unifiedHeaders.map(h=>csvEscape(r[h]!==undefined?r[h]:'')).join(',')); });
+  const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='PredictionArchive.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+});
+</script>
+</body>
+</html>
