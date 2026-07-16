@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Engine B v2 — Behaviour Engine</title>
+<style>
+:root {
+  --card-bg:#ffffff; --page-bg:#f1f5f9; --border:#e2e8f0; --border-strong:#cbd5e1;
+  --surface2:#f8fafc; --surface3:#eef2f7;
+  --text-primary:#0f172a; --text-secondary:#475569; --text-muted:#64748b;
+  --accent:#2563eb; --accent-bg:#eff6ff; --accent-border:#bfdbfe;
+  --green:#16a34a; --amber:#d97706; --red:#dc2626; --purple:#7c3aed;
+  --mono:'JetBrains Mono','Fira Code',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--page-bg);color:var(--text-primary);font-family:Inter,-apple-system,'Segoe UI',system-ui,sans-serif;font-size:16px;line-height:1.55;letter-spacing:-.01em;min-height:100vh;}
+.app{max-width:1100px;margin:0 auto;padding:32px 24px;}
+.topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:28px;flex-wrap:wrap;}
+.engine-badge{background:var(--accent-bg);border:1px solid var(--accent-border);color:var(--accent);font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:4px 10px;border-radius:8px;}
+.topbar-title{display:flex;align-items:center;gap:10px;}
+h1{font-size:24px;font-weight:800;letter-spacing:-.02em;}
+.subtitle{font-size:13px;color:var(--text-muted);margin-top:3px;font-weight:500;}
+.sh{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+.sh h2{font-size:14px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;}
+.status-bar{background:var(--card-bg);border:1px solid var(--border);border-radius:14px;padding:12px 16px;font-size:13px;color:var(--text-muted);margin-bottom:18px;display:none;align-items:center;gap:10px;box-shadow:0 1px 4px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);}
+.status-bar.active{display:flex;}
+.spinner{width:14px;height:14px;border:2px solid var(--border-strong);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.progress-track{flex:1;height:6px;background:var(--border);border-radius:999px;overflow:hidden;}
+.progress-fill{height:100%;background:var(--accent);border-radius:999px;transition:width .15s;width:0%;}
+.error-bar{background:#fef2f2;border:1px solid #fecaca;color:var(--red);border-radius:14px;padding:12px 16px;font-size:14px;font-weight:600;margin-bottom:18px;display:none;}
+.error-bar.active{display:block;}
+.results{display:none;}.results.active{display:block;}
+.empty-state{text-align:center;padding:60px 0;color:var(--text-muted);font-size:14px;}
+.data-source-panel{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;margin-bottom:22px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);}
+.ds-tabs{display:flex;border-bottom:1px solid var(--border);}
+.ds-tab{font-size:13px;font-weight:700;padding:11px 18px;background:none;border:none;color:var(--text-muted);cursor:pointer;transition:all .12s;border-bottom:2px solid transparent;margin-bottom:-1px;}
+.ds-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.ds-body{padding:18px;}
+.url-row{display:flex;gap:8px;}
+.url-row input{flex:1;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text-primary);font-size:14px;outline:none;font-family:var(--mono);}
+.btn-fetch{background:var(--card-bg);border:1px solid var(--border-strong);border-radius:10px;padding:10px 18px;color:var(--text-secondary);font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap;}
+.ds-hint{font-size:12px;color:var(--text-muted);margin-top:8px;}
+.file-zone{border:1.5px dashed var(--border-strong);border-radius:12px;padding:28px;text-align:center;cursor:pointer;position:relative;}
+.file-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;}
+.file-zone p{font-size:14px;color:var(--text-secondary);}
+.wash-report{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin-bottom:18px;font-size:13px;box-shadow:0 1px 4px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);}
+.controls{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;margin-bottom:22px;align-items:end;}
+.field label{display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;font-weight:700;}
+.field input{width:100%;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:9px 12px;color:var(--text-primary);font-size:14px;outline:none;}
+.btn-run{background:var(--accent);color:#fff;border:none;border-radius:12px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap;height:40px;box-shadow:0 1px 2px rgba(0,0,0,.08);}
+.btn-run:disabled{opacity:.4;cursor:not-allowed;box-shadow:none;}
+.csv-btn{background:#f1f5f9;border:1px solid var(--border);border-radius:10px;padding:8px 16px;color:var(--text-secondary);font-size:13px;font-weight:700;cursor:pointer;}
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:22px;}
+.mc{background:var(--card-bg);border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:0 1px 4px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);}
+.mc .ml{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-bottom:5px;}
+.mc .mv{font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--accent);line-height:1.15;}
+.mc .ms{font-size:12px;color:var(--text-secondary);margin-top:4px;}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+.tag{display:inline-flex;align-items:center;font-size:11px;font-weight:800;letter-spacing:.02em;padding:4px 11px;border-radius:999px;}
+.tag-hi{background:#fee2e2;color:var(--red);}
+.tag-lo{background:#dcfce7;color:var(--green);}
+.tag-up{background:#dcfce7;color:var(--green);}
+.tag-placeholder{background:#ede9fe;color:var(--purple);}
+.today-card{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:22px;box-shadow:0 1px 4px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);}
+.live-meta{display:flex;flex-wrap:wrap;gap:16px;padding:16px 20px;border-bottom:1px solid var(--border);}
+.tc-cell .tc-label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:700;margin-bottom:4px;}
+.tc-cell .tc-val{font-size:20px;font-weight:800;color:var(--text-primary);}
+.bri-card{margin:16px 20px 20px;padding:24px 26px;border-radius:16px;border:1px solid var(--accent-border);background:linear-gradient(135deg,#eff6ff,#faf5ff);}
+.bri-label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:700;margin-bottom:8px;}
+.bri-score-row{display:flex;align-items:baseline;gap:8px;}
+.bri-value{font-size:4rem;font-weight:200;line-height:1;background:linear-gradient(135deg,var(--accent),var(--purple));-webkit-background-clip:text;background-clip:text;color:transparent;}
+.bri-max{font-size:18px;color:var(--text-muted);font-weight:700;}
+.bri-bar-bg{height:14px;background:var(--border);border-radius:999px;margin-top:14px;overflow:hidden;}
+.bri-bar-fill{height:100%;border-radius:999px;transition:width .5s ease;background:var(--accent);}
+.info-card{margin:0 20px 20px;padding:18px 20px;border-radius:14px;border:1px solid var(--border);background:#f8fafc;}
+.info-card h3{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:800;margin-bottom:14px;}
+.info-row{display:flex;justify-content:space-between;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px;}
+.info-row:last-child{border-bottom:none;}
+.info-row .ir-label{color:var(--text-secondary);font-weight:600;}
+.info-row .ir-val{font-family:var(--mono);font-weight:800;font-size:16px;color:var(--accent);}
+.verdict-text{font-size:14px;line-height:1.7;color:var(--text-secondary);margin-top:12px;padding-top:12px;border-top:1px solid var(--border);}
+.evidence-cols{display:grid;grid-template-columns:1fr;gap:16px;padding:0 20px 20px;}
+@media(min-width:640px){ .evidence-cols{grid-template-columns:1fr 1fr;} }
+.evidence-group h3{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:800;margin-bottom:10px;}
+.ev-item{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.ev-item .ev-name{color:var(--text-secondary);flex:1;font-weight:600;}
+.ev-item .ev-lr{font-family:var(--mono);font-weight:800;font-size:13px;}
+.lr-pos{color:var(--green);} .lr-neg{color:var(--red);}
+.lib-wrap{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:20px;overflow-x:auto;box-shadow:0 1px 4px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);}
+.lib-cols{display:grid;grid-template-columns:1fr 90px 90px 90px 70px;gap:8px;padding:10px 18px;font-size:13px;align-items:center;min-width:560px;}
+.lib-hdr{background:#f8fafc;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:800;}
+.lib-row{border-bottom:1px solid var(--border);}
+.dev-toggle{font-size:12px;color:var(--text-muted);cursor:pointer;padding:10px 20px 18px;text-decoration:underline;text-decoration-style:dotted;font-weight:600;}
+.dev-panel{margin:0 20px 20px;padding:14px 18px;border-radius:12px;border:1px dashed var(--border-strong);background:#f8fafc;font-size:12px;color:var(--text-muted);font-family:var(--mono);}
+.dev-panel div{padding:3px 0;}
+.doc-card{margin:0 20px 20px;padding:18px 20px;border-radius:14px;border:1px solid var(--border);background:#f8fafc;font-size:14px;line-height:1.75;color:var(--text-secondary);}
+.doc-card h3{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:800;margin-bottom:12px;}
+.doc-card code{background:#eef2f7;padding:2px 6px;border-radius:5px;font-family:var(--mono);font-size:13px;color:var(--accent);}
+.doc-card pre{background:#0f172a;padding:14px;border-radius:10px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;margin:10px 0;color:#e2e8f0;}
+@media(max-width:700px){ .controls{grid-template-columns:1fr 1fr;} .evidence-cols{grid-template-columns:1fr;} .lib-cols{grid-template-columns:1fr 64px 64px;} .lib-cols>:nth-child(n+4){display:none;} }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div>
+      <div class="topbar-title">
+        <span class="engine-badge" id="engineBadge">Engine B v2.0</span>
+        <h1>Behaviour Engine</h1>
+      </div>
+      <p class="subtitle">Evidence Library retired &middot; Behaviour-based evidence &middot; LR &rarr; logLR &rarr; LogSum &rarr; BRI unchanged</p>
+    </div>
+    <button class="csv-btn" id="aboutBtn" onclick="toggleAbout()">&#9432; About / Version</button>
+  </div>
+
+  <div class="wash-report" id="aboutPanel" style="display:none"></div>
+
+  <div class="data-source-panel" id="dsPanel">
+    <div class="ds-tabs">
+      <button class="ds-tab active" data-src="url">URL</button>
+      <button class="ds-tab" data-src="file">File upload</button>
+    </div>
+    <div class="ds-body" id="dsSrcUrl">
+      <div class="url-row">
+        <input type="text" id="csvUrl" placeholder="Paste Google Sheets CSV URL or any public CSV link&hellip;"
+          value="https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0WRRoaKlcjrQ6xthFpq5r5n8XQpUSeUg7rsy0zXBUdx46HBacISyimAsIRbGPRYpsvpkUGwLCSJQm/pub?output=csv" spellcheck="false">
+        <button class="btn-fetch" id="fetchBtn">Fetch</button>
+      </div>
+      <p class="ds-hint">Google Sheets &rarr; File &rarr; Share &rarr; Publish to web &rarr; CSV</p>
+    </div>
+    <div class="ds-body" id="dsSrcFile" style="display:none">
+      <div class="file-zone" id="fileZone">
+        <input type="file" id="csvInput" accept=".csv"/>
+        <p><strong>Drop OHLC CSV here</strong> or click to browse</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="wash-report" id="washReport" style="display:none"></div>
+
+  <div class="controls" id="controlsPanel">
+    <div class="field"><label>ATR blast threshold (&times; ATR14)</label><input type="number" id="blastThresh" value="2" min="1" max="5" step="0.1"></div>
+    <div class="field"><label>Rolling window (days)</label><input type="number" id="lookback" value="9" min="9" max="9" step="1" disabled></div>
+    <div class="field"><label>Min samples / bucket (flag only)</label><input type="number" id="minSamples" value="5" min="1" max="50" step="1"></div>
+    <button class="btn-run" id="runBtn" disabled>Run Engine B v2</button>
+  </div>
+  <style id="autoRunStyle">#dsPanel,#washReport,#controlsPanel{display:none !important;}</style>
+  <button class="csv-btn" id="showSetupBtn" onclick="toggleSetupPanels()" style="margin-bottom:16px;">&#9881; Show Setup</button>
+
+  <div class="error-bar" id="errorBar"></div>
+  <div class="status-bar" id="statusBar"><div class="spinner"></div><span id="statusText">Processing&hellip;</span><div class="progress-track"><div class="progress-fill" id="progressFill"></div></div></div>
+
+  <div class="results" id="results">
+    <div class="summary-grid" id="summaryGrid"></div>
+
+    <div class="sh"><h2>Today &mdash; Blast Readiness Index</h2></div>
+    <div class="today-card" id="todayCard"></div>
+
+    <div class="sh" style="margin-top:24px;"><h2>Today's Behaviour Analysis</h2></div>
+    <div class="today-card" id="behaviourAnalysisCard"></div>
+
+    <div class="sh" style="margin-top:24px;"><h2>Historical Interpretation</h2></div>
+    <div class="today-card" id="historicalInterpCard"></div>
+
+    <div class="sh" style="margin-top:24px;"><h2>Trader Interpretation</h2></div>
+    <div class="today-card" id="traderInterpCard"></div>
+
+    <div class="sh" style="margin-top:24px;"><h2>Behaviour Library</h2></div>
+    <div class="lib-wrap" id="libTable"></div>
+
+    <div class="sh" style="margin-top:24px;">
+      <h2>Regime-Split Diagnostic (walk-forward)</h2>
+      <button class="csv-btn" id="regimeDiagBtn" onclick="runRegimeSplitDiagnostic()">Run Diagnostic</button>
+    </div>
+    <div class="info-card">
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;">
+        Compares the current pooled Shock-Recovery model against a regime-split version
+        (separate LR table per HighSptR/LowSptR) using forward-chaining walk-forward folds,
+        out-of-sample only. Diagnostic-only \u2014 does not change today's BRI or any production
+        fitting.
+      </div>
+      <div id="regimeDiagOut"><div style="font-size:12px;color:var(--text-muted);">Click "Run Diagnostic" to compare.</div></div>
+    </div>
+
+  </div>
+
+  <div class="empty-state" id="emptyState"><p>Load an OHLC CSV to begin</p></div>
+</div>
+
+<script>
+'use strict';
+// =============================================================================
+// ENGINE B v2.0 — BEHAVIOUR ENGINE
+// =============================================================================
+// Governing document: Engine B Design Specification v1.
+// Evidence Library (SD/STK/TRN keys, hierarchy, clustering) is RETIRED.
+// UNCHANGED: LR (Laplace-smoothed) -> logLR -> LogSum -> BRI (raw logistic).
+// CHANGED: only what "Evidence" means. Evidence is now a small set of
+// continuous Behaviours, each bucketed into Low/Medium/High via training-set
+// percentiles, each contributing one LR-derived logLR to LogSum.
+// =============================================================================
+
+const $=id=>document.getElementById(id);
+const LOOKBACK = 9;          // rolling window length (design constant, unrelated to old evidence keys)
+const FORWARD_WINDOW = 10;   // blast detection forward window (frozen ground-truth definition)
+const WARMUP_ROWS = 100;
+const REGIME_CONFIRM_STREAK = 3;
+const VERSION = {
+  engine: "Engine B v2.0",
+  architecture: "Behaviour Engine (Evidence Library retired)",
+  pipeline: "Behaviour -> Bucket (Low/Medium/High) -> LR -> logLR -> LogSum -> BRI",
+  governingDoc: "Engine B Design Specification v1",
+};
+
+// =============================================================================
+// FROZEN INFRASTRUCTURE — reused verbatim, unrelated to the retired Evidence
+// Library. CSV wash, Blast/Miss ground-truth cycle generation, and the Regime
+// Engine are foundational data-truth layers, not "evidence key" architecture.
+// =============================================================================
+function atr14(rows,i){
+  const slice=rows.slice(Math.max(0,i-13),i+1);
+  let s=0,c=0;
+  for(let j=1;j<slice.length;j++){s+=slice[j].TR;c++;}
+  return c===0?(rows[i].high-rows[i].low||1):(s/c||1);
+}
+function rawRegimeAt(rows,i){
+  if(i<50)return"HighSptR";
+  let hi=-Infinity,lo=Infinity;
+  for(let j=i-50;j<i;j++){hi=Math.max(hi,rows[j].high);lo=Math.min(lo,rows[j].low);}
+  return rows[i].close>(hi+lo)/2?"HighSptR":"LowSptR";
+}
+function buildConfirmedRegimeSeries(rows){
+  const n=rows.length; const confirmed=new Array(n);
+  let curConfirmed=null, streakLabel=null, streakCount=0;
+  for(let i=0;i<n;i++){
+    const raw=rawRegimeAt(rows,i);
+    if(curConfirmed===null){ curConfirmed=raw; streakLabel=raw; streakCount=1; }
+    else if(raw===curConfirmed){ streakLabel=raw; streakCount=1; }
+    else { if(raw===streakLabel){ streakCount++; } else { streakLabel=raw; streakCount=1; }
+      if(streakCount>=REGIME_CONFIRM_STREAK){ curConfirmed=raw; streakCount=0; streakLabel=null; } }
+    confirmed[i]=curConfirmed;
+  }
+  return {confirmed};
+}
+const _regimeCache=new WeakMap();
+function getRegime(rows,i){
+  let s=_regimeCache.get(rows); if(!s){ s=buildConfirmedRegimeSeries(rows); _regimeCache.set(rows,s); }
+  return s.confirmed[i];
+}
+
+function cleanDateStr(s){
+  if(!s)return null; s=s.replace(/['"]/g,"").trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
+  let m=s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if(m){const[,d,mo,y]=m;return y+"-"+mo.padStart(2,"0")+"-"+d.padStart(2,"0");}
+  const dt=new Date(s); if(!isNaN(dt))return dt.toISOString().slice(0,10);
+  return null;
+}
+function parseCleanNum(s){ if(s===null||s===undefined)return null; const n=parseFloat(String(s).replace(/[, ]/g,"")); return isNaN(n)||n<=0?null:n; }
+
+function washCSV(rawText){
+  const lines=rawText.trim().split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<2)throw new Error("CSV too short");
+  const hdr=lines[0].split(",").map(h=>String(h).replace(/^\ufeff/g,"").trim().toLowerCase());
+  const fi={ date:hdr.findIndex(h=>h==="date"), open:hdr.findIndex(h=>h==="open"), high:hdr.findIndex(h=>h==="high"), low:hdr.findIndex(h=>h==="low"), close:hdr.findIndex(h=>h==="close") };
+  if(Object.values(fi).includes(-1)) throw new Error("Cannot find columns. Need: Date, Open, High, Low, Close.");
+  let nNoDate=0,nBadHL=0,nDupe=0,nSpike=0; const seenDates=new Set(); let prevClose=null,prevOHLC=null; let validRows=[];
+  for(let i=1;i<lines.length;i++){
+    const p=lines[i].split(",");
+    const dk=cleanDateStr(p[fi.date]?.trim()||""); if(!dk){nNoDate++;continue;}
+    const o=parseCleanNum(p[fi.open]),h=parseCleanNum(p[fi.high]),l=parseCleanNum(p[fi.low]),c=parseCleanNum(p[fi.close]);
+    if(!o||!h||!l||!c||h<l||c>h||c<l){nBadHL++;continue;}
+    if(seenDates.has(dk)){nDupe++;continue;} seenDates.add(dk);
+    const ohlcKey=`${o}_${h}_${l}_${c}`; if(prevOHLC===ohlcKey){nDupe++;continue;} prevOHLC=ohlcKey;
+    if(prevClose!==null&&Math.abs(c-prevClose)/prevClose*100>20){nSpike++;prevClose=c;continue;}
+    prevClose=c; validRows.push({date:dk,open:o,high:h,low:l,close:c});
+  }
+  const cutoff=new Date(); cutoff.setFullYear(cutoff.getFullYear()-3); const cutoffStr=cutoff.toISOString().slice(0,10);
+  const beforeLB=validRows.length; validRows=validRows.filter(r=>r.date>=cutoffStr); const nLookback=beforeLB-validRows.length;
+  validRows.sort((a,b)=>new Date(a.date)-new Date(b.date));
+  for(let i=0;i<validRows.length;i++){
+    const curr=validRows[i],prev=i>0?validRows[i-1]:null;
+    curr.TR=prev?Math.max(curr.high-curr.low,Math.abs(curr.high-prev.close),Math.abs(curr.low-prev.close)):curr.high-curr.low;
+  }
+  if(validRows.length<115) throw new Error("After washing, only "+validRows.length+" rows remain (need >= 115).");
+  const report={raw:lines.length-1,clean:validRows.length,dropped:{parse:nNoDate,hl:nBadHL,dupe:nDupe,spike:nSpike,lookback:nLookback},dateFirst:validRows[0].date,dateLast:validRows[validRows.length-1].date};
+  return{rows:validRows,report};
+}
+function showWashReport(report){
+  const el=$("washReport");el.style.display="block";
+  const dropped=Object.values(report.dropped).reduce((a,b)=>a+b,0);
+  el.innerHTML='<div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:10px;">Data wash</div>'+
+    '<div style="font-size:12px;color:var(--text-secondary)">Raw: '+report.raw+' &middot; Clean: '+report.clean+' &middot; Dropped: '+dropped+' &middot; Range: '+report.dateFirst+' &rarr; '+report.dateLast+'</div>';
+}
+
+// Blast/Miss ground-truth cycle generator — FROZEN, unchanged. This defines
+// "what happened", completely independent of how Evidence is represented.
+function generateCycles(rows, thresh){
+  const cycles=[]; let p = WARMUP_ROWS;
+  while(p < rows.length - FORWARD_WINDOW){
+    const a14 = rows.slice(p-14, p).reduce((s,d)=>s+d.TR, 0) / 14;
+    const anchorIdx = p - 1; const ac = rows[anchorIdx].close;
+    const anchorRegime = getRegime(rows, anchorIdx);
+    let blastDay = -1, maxMoveATR = 0;
+    for(let di=0; di<FORWARD_WINDOW && p+di<rows.length; di++){
+      const fr = rows[p+di]; const mm = Math.max(Math.abs(fr.high-ac), Math.abs(ac-fr.low));
+      const mmATR = a14>0 ? mm/a14 : 0;
+      if(mmATR > maxMoveATR) maxMoveATR = mmATR;
+      if(a14>0 && mmATR >= thresh){ blastDay = di; break; }
+    }
+    if(blastDay >= 0){
+      const blastIdx = p + blastDay; const blastBar = rows[blastIdx];
+      const moveATR = Math.max(Math.abs(blastBar.high-ac), Math.abs(ac-blastBar.low)) / a14;
+      cycles.push({ anchorIdx, anchorDate: rows[anchorIdx].date, regime: anchorRegime, type:'Blast', blastIdx, blastDate: blastBar.date, daysToBlast: blastDay+1, moveATR });
+      p = blastIdx + 1;
+    } else {
+      cycles.push({ anchorIdx, anchorDate: rows[anchorIdx].date, regime: anchorRegime, type:'Miss', blastIdx:null, blastDate:null, daysToBlast:null, moveATR:maxMoveATR });
+      p += FORWARD_WINDOW;
+    }
+  }
+  return cycles;
+}
+
+// =============================================================================
+// ROLLING WINDOW — the single shared data-access point every Behaviour uses.
+// Extracts exactly the LOOKBACK trading days ending the day BEFORE `dayIdx`
+// (days dayIdx-9 .. dayIdx-1). `dayIdx` can be ANY day in the dataset, not
+// just a cycle anchor — this is what makes daily (MasterP-style) scoring
+// possible. No behaviour may reach outside this window.
+// =============================================================================
+function getRollingWindow(rows, dayIdx){
+  // dayIdx === rows.length is a valid "virtual anchor" (live scoring: today's
+  // own completed bar becomes Day -1 of its window) — matches the exact
+  // convention the previous production Engine B used for its live signal.
+  // dayIdx > rows.length is genuinely out of bounds.
+  if(dayIdx - 10 < 0 || dayIdx > rows.length) return null;
+  const idxs = []; for(let d=LOOKBACK; d>=1; d--) idxs.push(dayIdx-d);
+  return {
+    idxs,
+    closes: idxs.map(i=>rows[i].close),
+    opens:  idxs.map(i=>rows[i].open),
+    highs:  idxs.map(i=>rows[i].high),
+    lows:   idxs.map(i=>rows[i].low),
+    quiet:  idxs.map(i=>{ const a=atr14(rows,i); return a>0 ? rows[i].TR/a : 1; }),
+    rets:   idxs.map(i=>rows[i].close - rows[i-1].close),
+  };
+}
+
+// =============================================================================
+// BEHAVIOUR ENGINE — generic registry. To add a future behaviour: implement
+// the interface below and call BehaviourEngine.register(...). Nothing else
+// in this file (fit, score, BRI, rendering) needs to change.
+//
+// Behaviour interface (all fields required):
+//   name         : string, unique id — used as the evidence key internally
+//   description  : string, human-readable market interpretation
+//   status       : 'active' | 'placeholder'
+//   computeScore(rows, dayIdx) -> number | null
+//     - MUST only read rows at index < dayIdx (no look-ahead)
+//     - MUST be deterministic (pure function of rows + dayIdx)
+//     - return null to signal "absent this day" (skipped in LogSum, same
+//       semantics the old Evidence Library used for non-firing keys)
+// =============================================================================
+const BehaviourEngine = {
+  behaviours: [],
+  register(behaviour){
+    const required = ['name','description','status','computeScore'];
+    required.forEach(f=>{ if(behaviour[f]===undefined) throw new Error('Behaviour missing required field: '+f); });
+    this.behaviours.push(behaviour);
+  },
+  active(){ return this.behaviours.filter(b=>b.status==='active'); },
+  placeholders(){ return this.behaviours.filter(b=>b.status==='placeholder'); },
+};
+
+// ---- SHOCK RECOVERY (VALIDATED — active) ----------------------------------
+// Locates the loudest (highest TR/ATR14) day within the rolling window and
+// measures how quickly quietness returned afterward. Passed every check in
+// Design Spec v1 (P1-P10): stable sample size, positive leave-one-out
+// contribution, forward-chaining stability, naturally bounded (no continuous-
+// representation fragility), and — critically — confirmed computable and
+// STABLE every trading day (low bucket-flip rate, smooth day-to-day drift,
+// anchor-day distribution statistically indistinguishable from all-day
+// distribution). See Design Spec v1, properties P9/P10.
+//
+// SHOCK-AGE CUTOFF REMOVED (post shock-age validation study): the study
+// found no statistically significant relationship between shock age (3-9
+// days) and Blast probability, no cutoff that improved both discrimination
+// and calibration, and no evidence favoring a decay weighting either. Every
+// shock within the fixed 9-day lookback is now scored identically regardless
+// of how old it is. The ONLY remaining null case is when the loudest day is
+// the very last day in the window (shockIdx===LOOKBACK-1) — that is a data-
+// availability floor, not an age policy: with zero trailing days there is
+// nothing to average, so the formula is undefined, not merely "too old".
+const ShockRecovery = {
+  name: 'shockRecovery',
+  description: 'Locates the loudest day (highest TR/ATR14) anywhere in the rolling 9-day '
+    + 'window and measures how quickly quietness returned afterward. Low = shock still '
+    + 'unresolved / ongoing volatility. High = shock fully absorbed / market has calmed. '
+    + 'Every shock in the window is treated equally regardless of age (shock-age cutoff '
+    + 'removed per validation study). Absent (null) only when the loudest day is the very '
+    + 'last day in the window — there are zero trailing days to measure any recovery from, '
+    + 'so the formula is undefined, not "too old".',
+  status: 'active',
+  computeScore(rows, dayIdx){
+    const w = getRollingWindow(rows, dayIdx);
+    if(!w) return null;
+    const shockIdx = w.quiet.indexOf(Math.max(...w.quiet));
+    const after = w.quiet.slice(shockIdx+1);
+    if(after.length === 0) return null; // zero trailing days — formula undefined, not an age policy
+    const avgAfter = after.reduce((a,b)=>a+b,0)/after.length;
+    return avgAfter / (w.quiet[shockIdx]||1);
+  },
+};
+BehaviourEngine.register(ShockRecovery);
+
+// =============================================================================
+// DISPLAY-ONLY HELPER (v2 dashboard transparency addition).
+// Re-derives the exact same intermediate values ShockRecovery.computeScore
+// already computes internally, purely for rendering. Does NOT feed back into
+// computeScore, fitting, LR, logLR, LogSum, or BRI in any way — read-only
+// mirror of the existing formula for explainability.
+// =============================================================================
+function getShockDetail(rows, dayIdx){
+  const w = getRollingWindow(rows, dayIdx);
+  if(!w) return null;
+  const shockIdx = w.quiet.indexOf(Math.max(...w.quiet));
+  const after = w.quiet.slice(shockIdx+1);
+  const shockDayOffset = -(LOOKBACK - shockIdx); // e.g. Day -9 .. Day -1
+  const postShockOffsets = after.map((_,k)=> -(LOOKBACK - (shockIdx+1+k)));
+  if(after.length===0){
+    return {
+      window: w, shockIdx, shockDayOffset, shockValue: w.quiet[shockIdx],
+      after: [], postShockOffsets: [], avgAfter: null, recoveryScore: null,
+      dates: w.idxs.map(i=>rows[i].date),
+    };
+  }
+  const avgAfter = after.reduce((a,b)=>a+b,0)/after.length;
+  const recoveryScore = avgAfter / (w.quiet[shockIdx]||1);
+  return {
+    window: w, shockIdx, shockDayOffset, shockValue: w.quiet[shockIdx],
+    after, postShockOffsets, avgAfter, recoveryScore,
+    dates: w.idxs.map(i=>rows[i].date),
+  };
+}
+
+// ---- REVERSAL (concept validated, implementation REJECTED — placeholder) --
+// Do not activate. Momentum-exhaustion concept survived every outcome-based
+// test (walk-forward, forward-chaining, leave-one-out) but its formula
+// failed the live-daily-stability requirement: near-zero day-to-day
+// autocorrelation, 43% bucket-flip rate, and unbounded values from a
+// near-zero-denominator division (see Design Spec v1, P7/P9/P10). Needs a
+// numerically robust reformulation and full re-validation before it can be
+// registered with status:'active'. computeScore intentionally throws if
+// ever invoked, so an accidental activation fails loudly instead of running
+// with silently-bad statistics.
+const ReversalPlaceholder = {
+  name: 'reversal',
+  description: 'PLACEHOLDER — NOT IMPLEMENTED. Concept (early/late-window momentum '
+    + 'exhaustion) validated; current formula rejected for failing daily-stability '
+    + 'checks (Design Spec v1, P7/P9/P10). Requires reformulation + full '
+    + 're-validation (correlation, walk-forward, forward-chaining, daily-stability) '
+    + 'before activation.',
+  status: 'placeholder',
+  computeScore(rows, dayIdx){ throw new Error('reversal is a placeholder behaviour — not implemented, must not be scored'); },
+};
+BehaviourEngine.register(ReversalPlaceholder);
+
+// =============================================================================
+// GENERIC BUCKETING + LR LEARNING — identical mechanics for every behaviour,
+// no behaviour-specific code below this point.
+// =============================================================================
+function computeLR(blastCount, missCount, totalBlast, totalMiss){
+  const pBlast=(blastCount+1)/(totalBlast+1), pMiss=(missCount+1)/(totalMiss+1);
+  return pBlast/pMiss;
+}
+function tercileCuts(values){
+  const v=values.filter(x=>x!==null&&x!==undefined).sort((a,b)=>a-b);
+  if(!v.length) return {p33:0,p66:0};
+  return { p33:v[Math.floor(v.length*0.33)], p66:v[Math.floor(v.length*0.66)] };
+}
+function bucketOf(value,cuts){ if(value===null||value===undefined) return null; return value<=cuts.p33?'Low':value>=cuts.p66?'High':'Medium'; }
+
+// Generic single-behaviour fit, factored out of fitBehaviourLibrary so the
+// regime-split walk-forward diagnostic (below) can reuse the IDENTICAL
+// LR/logLR math on arbitrary cycle subsets, without touching production
+// fitting/scoring at all.
+function fitOneBehaviourFromCycles(rows, trainCycles, behaviour, minSamplesPerBucket){
+  let totalBlast=0, totalMiss=0;
+  trainCycles.forEach(c=>{ if(c.type==='Blast') totalBlast++; else totalMiss++; });
+  const scored = trainCycles.map(c=>({ score: behaviour.computeScore(rows, c.anchorIdx), type: c.type }))
+    .filter(s=>s.score!==null);
+  const cuts = tercileCuts(scored.map(s=>s.score));
+  const counts = { Low:{blast:0,miss:0}, Medium:{blast:0,miss:0}, High:{blast:0,miss:0} };
+  scored.forEach(s=>{ const bk=bucketOf(s.score,cuts); if(s.type==='Blast') counts[bk].blast++; else counts[bk].miss++; });
+  const buckets = {};
+  ['Low','Medium','High'].forEach(bk=>{
+    const c = counts[bk]; const n = c.blast+c.miss;
+    const lr = computeLR(c.blast, c.miss, totalBlast, totalMiss);
+    buckets[bk] = { lr, logLR: Math.log(lr), n, blastCount:c.blast, missCount:c.miss, belowMinSample: n<minSamplesPerBucket };
+  });
+  return { cuts, buckets, totalBlast, totalMiss, sampleSize: scored.length };
+}
+
+// Fit (historical learning): training-set-only percentile cuts + per-bucket
+// Blast/Miss counts -> Laplace-smoothed LR -> logLR. Read-only once built,
+// same freeze discipline as the retired Evidence Library.
+function fitBehaviourLibrary(rows, trainingCycles, minSamplesPerBucket){
+  let totalBlast=0, totalMiss=0;
+  trainingCycles.forEach(c=>{ if(c.type==='Blast') totalBlast++; else totalMiss++; });
+
+  const library = {};
+  BehaviourEngine.active().forEach(b=>{
+    const scored = trainingCycles.map(c=>({ score: b.computeScore(rows, c.anchorIdx), type: c.type, daysToBlast: c.daysToBlast }))
+      .filter(s=>s.score!==null);
+    const cuts = tercileCuts(scored.map(s=>s.score));
+    const counts = { Low:{blast:0,miss:0}, Medium:{blast:0,miss:0}, High:{blast:0,miss:0} };
+    // Additive, display-only: collect daysToBlast for Blast cycles per bucket
+    // (descriptive timing stats). Does not participate in LR/logLR/cuts math.
+    const daysToBlastByBucket = { Low:[], Medium:[], High:[] };
+    scored.forEach(s=>{
+      const bk=bucketOf(s.score,cuts);
+      if(s.type==='Blast'){ counts[bk].blast++; if(s.daysToBlast!=null) daysToBlastByBucket[bk].push(s.daysToBlast); }
+      else counts[bk].miss++;
+    });
+    const buckets = {};
+    ['Low','Medium','High'].forEach(bk=>{
+      const c = counts[bk]; const n = c.blast+c.miss;
+      const lr = computeLR(c.blast, c.miss, totalBlast, totalMiss);
+      buckets[bk] = { lr, logLR: Math.log(lr), n, blastCount:c.blast, missCount:c.miss, belowMinSample: n<minSamplesPerBucket,
+        daysToBlastSamples: daysToBlastByBucket[bk] };
+    });
+    library[b.name] = { cuts, buckets, description: b.description, sampleSize: scored.length, totalCycles: trainingCycles.length };
+  });
+  return Object.freeze({ library: Object.freeze(library), totalBlast, totalMiss });
+}
+
+// =============================================================================
+// SCORE — Evidence -> LR -> logLR -> LogSum -> BRI. IDENTICAL regardless of
+// which/how-many behaviours are registered; this function never changes when
+// a new behaviour is added.
+// =============================================================================
+function rawLogisticBRI(logSum){ return 100/(1+Math.exp(-logSum)); } // UNCHANGED formula, same as v6.1/v6.2
+
+function scoreDay(rows, dayIdx, fitted){
+  const active = [];
+  let logSum = 0;
+  BehaviourEngine.active().forEach(b=>{
+    const score = b.computeScore(rows, dayIdx);
+    if(score===null) return; // absent today
+    const entry = fitted.library[b.name];
+    const bk = bucketOf(score, entry.cuts);
+    const bd = entry.buckets[bk];
+    logSum += bd.logLR;
+    active.push({ name:b.name, score, bucket:bk, lr:bd.lr, logLR:bd.logLR, n:bd.n });
+  });
+  const bri = rawLogisticBRI(logSum);
+  const positiveAll = active.filter(e=>e.lr>1).sort((a,b)=>b.lr-a.lr);
+  const negativeAll = active.filter(e=>e.lr<1).sort((a,b)=>a.lr-b.lr);
+  return {
+    bri, logSum, activeCount: active.length,
+    positive: positiveAll.slice(0,5), negative: negativeAll.slice(0,5),
+    positiveCount: positiveAll.length, negativeCount: negativeAll.length,
+    activeFull: active, // v2 addition: full list, not just top-5 (small behaviour count makes this cheap)
+  };
+}
+
+// =============================================================================
+// ORCHESTRATION
+// =============================================================================
+function runEngineB(rows, thresh, minSamplesPerBucket, onProgress){
+  return new Promise((resolve,reject)=>{
+    const step=(phase,fn)=>{ onProgress&&onProgress(phase.label,phase.pct); return new Promise(res=>setTimeout(()=>{try{res(fn());}catch(e){reject(e);}},0)); };
+    (async()=>{
+      const cycles = await step({label:'Detecting Blast & Miss cycles\u2026',pct:20}, ()=>{
+        const c = generateCycles(rows, thresh);
+        if(!c.length) throw new Error('No cycles detected.');
+        return c;
+      });
+      const eligible = cycles.filter(c=>c.anchorIdx >= LOOKBACK+1 && c.anchorIdx-10>=0);
+
+      const fitted = await step({label:'Fitting Behaviour Library\u2026',pct:60}, ()=>fitBehaviourLibrary(rows, eligible, minSamplesPerBucket));
+
+      const result = await step({label:'Scoring live signal\u2026',pct:95}, ()=>{
+        const todayIdx = rows.length - 1;
+        const todayRegime = getRegime(rows, todayIdx);
+        const lastCycle = cycles[cycles.length-1];
+        const briResult = (todayIdx >= LOOKBACK) ? scoreDay(rows, todayIdx+1, fitted) : null;
+        return { rows, cycles, eligible, fitted, todayIdx, todayRegime, lastCycle, briResult, minSamplesPerBucket, thresh };
+      });
+      onProgress&&onProgress('Done',100);
+      resolve(result);
+    })().catch(reject);
+  });
+}
+
+// =============================================================================
+// RENDER
+// =============================================================================
+let R = null;
+function mc(label,value,sub){ return`<div class="mc"><div class="ml">${label}</div><div class="mv">${value}</div><div class="ms">${sub}</div></div>`; }
+function lrCls(l){ return l>1?"lr-pos":l<1?"lr-neg":""; }
+
+function briStatus(bri){
+  if(bri<=30) return {label:'Low', color:'var(--red)'};
+  if(bri<=60) return {label:'Neutral', color:'var(--text-secondary)'};
+  if(bri<=80) return {label:'Elevated', color:'var(--amber)'};
+  return {label:'High', color:'var(--green)'};
+}
+
+function toggleAbout(){
+  const panel=$("aboutPanel"); const visible=panel.style.display!=="none";
+  if(visible){panel.style.display="none";return;}
+  panel.style.display="block";
+  panel.innerHTML='<div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:8px;">Version Information</div>'+
+    Object.entries(VERSION).map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-secondary);font-size:12px;"><span>${k}</span><span>${v}</span></div>`).join('');
+}
+$("engineBadge").textContent = VERSION.engine;
+
+function renderSummary(){
+  const {cycles,eligible,fitted}=R;
+  const blastN=cycles.filter(c=>c.type==='Blast').length, missN=cycles.filter(c=>c.type==='Miss').length;
+  $("summaryGrid").innerHTML =
+    mc("Total cycles", cycles.length, "Blast + Miss") +
+    mc("Blast / Miss", blastN+" / "+missN, ((blastN/cycles.length*100).toFixed(1))+"% blast rate") +
+    mc("Active behaviours", BehaviourEngine.active().length, BehaviourEngine.placeholders().length+" placeholder(s)") +
+    mc("Training cycles used", fitted.totalBlast+fitted.totalMiss, "for Behaviour Library fit") +
+    mc("Rolling window", "9d", "Day \u22129 \u2192 Day \u22121");
+}
+
+function renderToday(){
+  const {todayRegime,lastCycle,briResult}=R;
+  let html = `<div class="live-meta">
+    <div class="tc-cell"><div class="tc-label">Regime</div><div class="tc-val"><span class="tag ${todayRegime==='HighSptR'?'tag-hi':'tag-lo'}">${todayRegime}</span></div></div>
+    <div class="tc-cell"><div class="tc-label">Last cycle</div><div class="tc-val" style="font-size:13px">${lastCycle?lastCycle.type+' \u00b7 '+lastCycle.anchorDate:'\u2014'}</div></div>
+  </div>`;
+  if(!briResult){ html += `<div style="padding:18px;font-size:12px;color:var(--text-muted)">Not enough history to score live signal</div>`; $("todayCard").innerHTML=html; return; }
+
+  const status = briStatus(briResult.bri);
+  html += `<div class="bri-card">
+    <div class="bri-label">Blast Readiness Index <span style="font-weight:400;text-transform:none;">(Behaviour Engine, no calibration layer)</span></div>
+    <div class="bri-score-row"><span class="bri-value" style="color:${status.color}">${briResult.bri.toFixed(0)}</span><span class="bri-max">/ 100</span></div>
+    <div class="bri-bar-bg"><div class="bri-bar-fill" style="width:${briResult.bri.toFixed(0)}%;background:${status.color}"></div></div>
+    <span class="tag" style="margin-top:12px;background:${status.color}22;color:${status.color}">${status.label}</span>
+  </div>`;
+
+  html += `<div class="info-card"><h3>Evidence Composition</h3>
+    <div class="info-row"><span class="ir-label">LogSum</span><span class="ir-val">${briResult.logSum.toFixed(4)}</span></div>
+    <div class="info-row"><span class="ir-label">Active behaviours today</span><span class="ir-val">${briResult.activeCount} / ${BehaviourEngine.active().length}</span></div>
+    <div class="info-row"><span class="ir-label">Positive / Negative</span><span class="ir-val">${briResult.positiveCount} / ${briResult.negativeCount}</span></div>
+  </div>`;
+
+  html += `<div class="evidence-cols">
+    <div class="evidence-group"><h3>Active Behaviour Detail</h3>
+      ${briResult.activeFull.length ? briResult.activeFull.map(e=>`<div class="ev-item"><div class="ev-name">${e.name} (${e.bucket}, score ${e.score.toFixed(3)})</div><div class="ev-lr ${lrCls(e.lr)}">LR ${e.lr.toFixed(2)}\u00d7</div></div>`).join('') : '<div style="font-size:11px;color:var(--text-muted)">No behaviours fired today</div>'}
+    </div>
+    <div class="evidence-group"><h3>Placeholder (not scored)</h3>
+      ${BehaviourEngine.placeholders().map(p=>`<div class="ev-item"><div class="ev-name">${p.name} <span class="tag tag-placeholder">placeholder</span></div></div>`).join('')}
+    </div>
+  </div>`;
+
+  html += `<div class="dev-toggle" onclick="toggleDevPanel()">\u2699 Developer details <span id="devToggleIcon">\u25b6</span></div>
+  <div class="dev-panel" id="devPanel" style="display:none">
+    <div>logSum: ${briResult.logSum.toFixed(4)}</div>
+    <div>BRI formula (unchanged): 100 / (1 + e^-logSum)</div>
+    <div>Calibration layer: NOT APPLIED (v2 implementation phase, calibration deferred)</div>
+    <div>Active behaviour list: ${BehaviourEngine.active().map(b=>b.name).join(', ')}</div>
+    <div>Placeholder behaviour list: ${BehaviourEngine.placeholders().map(b=>b.name).join(', ')}</div>
+  </div>`;
+  $("todayCard").innerHTML = html;
+}
+function toggleDevPanel(){ const p=$("devPanel"); const v=p.style.display!=="none"; p.style.display=v?"none":"block"; $("devToggleIcon").textContent=v?"\u25b6":"\u25bc"; }
+
+// =============================================================================
+// TRADER TRANSPARENCY PANELS (v2 dashboard addition)
+// Presentation-only. Reads existing fitted library / briResult / getShockDetail
+// mirror values. Does not alter any Engine B computation.
+// =============================================================================
+function pct(x){ return (x*100).toFixed(1)+"%"; }
+function fmt3(x){ return x===null||x===undefined?"\u2014":x.toFixed(3); }
+
+function quantile(sorted, q){
+  if(!sorted.length) return null;
+  const pos=(sorted.length-1)*q, base=Math.floor(pos), rest=pos-base;
+  return sorted[base+1]!==undefined ? sorted[base]+rest*(sorted[base+1]-sorted[base]) : sorted[base];
+}
+
+function renderBehaviourAnalysis(){
+  const {rows, todayIdx, briResult} = R;
+  const el = $("behaviourAnalysisCard");
+  if(!briResult){ el.innerHTML = '<div style="padding:18px;font-size:12px;color:var(--text-muted)">Not enough history to analyse.</div>'; return; }
+  const dayIdx = todayIdx+1;
+  const sd = getShockDetail(rows, dayIdx);
+  const shockEntry = briResult.activeFull.find(e=>e.name==='shockRecovery');
+  if(!sd || sd.avgAfter===null || !shockEntry){
+    el.innerHTML = '<div style="padding:18px;font-size:12px;color:var(--text-muted)">Shock Recovery not scoreable today (loudest day is the most recent day in the window \u2014 no trailing days to measure recovery from).</div>';
+    return;
+  }
+  // Timeline: 9 slots, Day -9 .. Day -1
+  const offsets = []; for(let d=LOOKBACK; d>=1; d--) offsets.push(-d);
+  const postSet = new Set(sd.postShockOffsets);
+  const timelineCells = offsets.map((off,i)=>{
+    const isShock = off===sd.shockDayOffset;
+    const isPost = postSet.has(off);
+    const bg = isShock ? 'var(--red)' : isPost ? 'var(--accent)' : 'var(--surface3)';
+    const label = isShock ? 'SHOCK' : isPost ? 'post' : '';
+    return `<div style="flex:1;text-align:center;">
+      <div style="height:34px;border-radius:5px;background:${bg}22;border:1px solid ${bg};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:${bg};">${label}</div>
+      <div style="font-size:10px;color:var(--text-muted);margin-top:3px;">D${off}</div>
+      <div style="font-size:9px;color:var(--text-secondary)">${sd.dates[i]}</div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="info-card" style="margin:18px;">
+      <h3>Rolling 9-Day Window &mdash; Shock &amp; Recovery Timeline</h3>
+      <div style="display:flex;gap:4px;margin:10px 0 14px;">${timelineCells}</div>
+      <div style="font-size:11px;color:var(--text-muted);display:flex;gap:14px;flex-wrap:wrap;">
+        <span><span style="color:var(--red)">\u25a0</span> dominant shock day</span>
+        <span><span style="color:var(--accent)">\u25a0</span> post-shock days used for recovery avg</span>
+      </div>
+    </div>
+    <div class="info-card" style="margin:0 18px 18px;">
+      <h3>Shock Detection</h3>
+      <div class="info-row"><span class="ir-label">Largest shock (TR/ATR14)</span><span class="ir-val">${fmt3(sd.shockValue)}</span></div>
+      <div class="info-row"><span class="ir-label">Shock position</span><span class="ir-val">Day ${sd.shockDayOffset} (${sd.dates[sd.shockIdx]})</span></div>
+      <div class="info-row"><span class="ir-label">Post-shock observations used</span><span class="ir-val">${sd.after.length}</span></div>
+      <div class="info-row"><span class="ir-label">Average post-shock value</span><span class="ir-val">${fmt3(sd.avgAfter)}</span></div>
+      <div class="info-row"><span class="ir-label">Recovery Score</span><span class="ir-val">${fmt3(sd.recoveryScore)}</span></div>
+      <div class="info-row"><span class="ir-label">Recovery Bucket</span><span class="ir-val">${shockEntry.bucket} <span style="color:var(--text-muted);font-family:var(--mono);font-size:13px;">(${bucketRangeLabel(shockEntry.bucket, R.fitted.library['shockRecovery'].cuts)})</span></span></div>
+    </div>
+    <div class="dev-toggle" onclick="toggleShockDevPanel()">\u2699 Developer calculation <span id="shockDevIcon">\u25b6</span></div>
+    <div class="dev-panel" id="shockDevPanel" style="display:none">
+      <div>Post-shock values (Day ${sd.postShockOffsets[0]} \u2192 Day ${sd.postShockOffsets[sd.postShockOffsets.length-1]}): [${sd.after.map(v=>v.toFixed(4)).join(', ')}]</div>
+      <div>Average(post-shock) = (${sd.after.map(v=>v.toFixed(4)).join(' + ')}) / ${sd.after.length} = ${sd.avgAfter.toFixed(4)}</div>
+      <div>Largest shock value = ${sd.shockValue.toFixed(4)}</div>
+      <div>Recovery Score = ${sd.avgAfter.toFixed(4)} / ${sd.shockValue.toFixed(4)} = ${sd.recoveryScore.toFixed(4)}</div>
+    </div>
+  `;
+}
+function toggleShockDevPanel(){ const p=$("shockDevPanel"); const v=p.style.display!=="none"; p.style.display=v?"none":"block"; $("shockDevIcon").textContent=v?"\u25b6":"\u25bc"; }
+
+function renderHistoricalInterpretation(){
+  const {fitted, briResult} = R;
+  const el = $("historicalInterpCard");
+  const shockEntry = briResult && briResult.activeFull.find(e=>e.name==='shockRecovery');
+  if(!briResult || !shockEntry){ el.innerHTML = '<div style="padding:18px;font-size:12px;color:var(--text-muted)">No historical bucket to interpret today.</div>'; return; }
+  const libEntry = fitted.library['shockRecovery'];
+  const bk = shockEntry.bucket;
+  const b = libEntry.buckets[bk];
+  const totalN = b.blastCount + b.missCount;
+  const blastPct = totalN? b.blastCount/totalN : 0;
+  const missPct = totalN? b.missCount/totalN : 0;
+
+  let timingHtml = '';
+  const samples = (b.daysToBlastSamples||[]).slice().sort((a,bb)=>a-bb);
+  if(samples.length>=3){
+    const med = quantile(samples,0.5), p25 = quantile(samples,0.25), p75 = quantile(samples,0.75);
+    timingHtml = `
+      <h3 style="margin-top:16px">Historical Timing (Blast cycles in this bucket, n=${samples.length})</h3>
+      <div class="info-row"><span class="ir-label">Median days-to-Blast</span><span class="ir-val">${med.toFixed(1)}</span></div>
+      <div class="info-row"><span class="ir-label">25th percentile</span><span class="ir-val">${p25.toFixed(1)}</span></div>
+      <div class="info-row"><span class="ir-label">75th percentile</span><span class="ir-val">${p75.toFixed(1)}</span></div>
+    `;
+  }
+
+  el.innerHTML = `
+    <div class="info-card" style="margin:18px;">
+      <h3>Bucket: Shock Recovery = ${bk} ${b.belowMinSample?'<span class="tag tag-placeholder" style="margin-left:6px;">low sample</span>':''}</h3>
+      <div class="info-row"><span class="ir-label">Historical Blast count</span><span class="ir-val">${b.blastCount}</span></div>
+      <div class="info-row"><span class="ir-label">Historical Miss count</span><span class="ir-val">${b.missCount}</span></div>
+      <div class="info-row"><span class="ir-label">Historical Blast %</span><span class="ir-val">${pct(blastPct)}</span></div>
+      <div class="info-row"><span class="ir-label">Historical Miss %</span><span class="ir-val">${pct(missPct)}</span></div>
+      <div class="info-row"><span class="ir-label">Likelihood Ratio</span><span class="ir-val ${lrCls(b.lr)}">${b.lr.toFixed(2)}\u00d7</span></div>
+      <div class="info-row"><span class="ir-label">logLR contribution</span><span class="ir-val">${b.logLR.toFixed(4)}</span></div>
+      <div class="info-row"><span class="ir-label">Contribution to today's LogSum</span><span class="ir-val">${b.logLR.toFixed(4)} / ${briResult.logSum.toFixed(4)}</span></div>
+      ${timingHtml}
+    </div>
+  `;
+}
+
+function renderTraderInterpretation(){
+  const {fitted, briResult, todayRegime} = R;
+  const el = $("traderInterpCard");
+  const shockEntry = briResult && briResult.activeFull.find(e=>e.name==='shockRecovery');
+  if(!briResult || !shockEntry){ el.innerHTML = '<div style="padding:18px;font-size:12px;color:var(--text-muted)">Insufficient data for interpretation.</div>'; return; }
+  const b = fitted.library['shockRecovery'].buckets[shockEntry.bucket];
+  const status = briStatus(briResult.bri);
+
+  const absorbText = shockEntry.bucket==='High'
+    ? "the dominant shock is largely absorbed \u2014 recent volatility has calmed back toward pre-shock levels"
+    : shockEntry.bucket==='Low'
+    ? "the dominant shock is still unresolved \u2014 volatility has not meaningfully calmed since it occurred"
+    : "the dominant shock is partially absorbed \u2014 volatility has calmed some but not fully";
+
+  const favourText = b.lr>1.15
+    ? `historically favourable for a Blast: this bucket showed ${pct(b.blastCount/(b.blastCount+b.missCount))} Blast rate vs its Miss rate, an LR of ${b.lr.toFixed(2)}\u00d7`
+    : b.lr<0.87
+    ? `historically unfavourable for a Blast: this bucket showed ${pct(b.blastCount/(b.blastCount+b.missCount))} Blast rate, an LR of ${b.lr.toFixed(2)}\u00d7`
+    : `historically neutral: Blast rate of ${pct(b.blastCount/(b.blastCount+b.missCount))} is close to base rate (LR ${b.lr.toFixed(2)}\u00d7)`;
+
+  el.innerHTML = `
+    <div class="info-card" style="margin:18px;">
+      <div class="info-row"><span class="ir-label">Current market state</span><span class="ir-val" style="font-weight:400;text-align:right;max-width:60%">${todayRegime} &middot; BRI ${briResult.bri.toFixed(0)} (${status.label})</span></div>
+      <div class="verdict-text" style="border-top:none;padding-top:0;">
+        Today, <strong>${absorbText}</strong>. Based on the ${fitted.totalBlast+fitted.totalMiss} historical training cycles, this Shock-Recovery bucket (${shockEntry.bucket}) is <strong>${favourText}</strong>.
+      </div>
+      <div class="verdict-text">
+        <strong>BRI is a relative readiness score, not a calibrated probability.</strong> No calibration layer is applied in this version, so the number above should be read as a rank/ordering signal (higher = more readiness relative to other days), not as "X% chance of a blast."
+      </div>
+    </div>
+  `;
+}
+
+function bucketRangeLabel(bk, cuts){
+  const p33 = cuts.p33.toFixed(3), p66 = cuts.p66.toFixed(3);
+  if(bk==='Low') return `\u2264 ${p33}`;
+  if(bk==='High') return `\u2265 ${p66}`;
+  return `${p33} \u2013 ${p66}`;
+}
+function renderLibTable(){
+  const {fitted}=R;
+  const hdr = `<div class="lib-cols lib-hdr"><div>Behaviour / Bucket</div><div style="text-align:right">Blast</div><div style="text-align:right">Miss</div><div style="text-align:right">Sample</div><div style="text-align:right">LR</div></div>`;
+  let rows = '';
+  Object.entries(fitted.library).forEach(([name, entry])=>{
+    rows += `<div class="lib-row lib-cols" style="background:var(--surface2);font-weight:600;"><div>${name}</div><div></div><div></div><div style="text-align:right">n=${entry.sampleSize}/${entry.totalCycles}</div><div></div></div>`;
+    ['Low','Medium','High'].forEach(bk=>{
+      const b = entry.buckets[bk];
+      rows += `<div class="lib-row lib-cols"><div style="padding-left:14px;color:var(--text-secondary)">${bk} <span style="color:var(--text-muted);font-family:var(--mono);font-size:11px;">(${bucketRangeLabel(bk, entry.cuts)})</span>${b.belowMinSample?' \u26a0':''}</div><div class="num" style="text-align:right">${b.blastCount}</div><div class="num" style="text-align:right">${b.missCount}</div><div class="num" style="text-align:right;color:var(--text-muted)">${b.n}</div><div class="num ${lrCls(b.lr)}" style="text-align:right;font-weight:600">${b.lr.toFixed(2)}\u00d7</div></div>`;
+    });
+  });
+  $("libTable").innerHTML = hdr + rows;
+}
+
+// =============================================================================
+// REGIME-SPLIT WALK-FORWARD DIAGNOSTIC (opt-in, read-only comparison tool).
+// Answers: "would splitting shockRecovery's LR table by regime (HighSptR /
+// LowSptR) actually improve out-of-sample discrimination and/or stability,
+// or would it just add noise from smaller per-bucket samples?"
+//
+// This NEVER writes to R.fitted and NEVER changes BRI/scoreDay/production
+// fitting. It builds its own temporary pooled-vs-regime-split models per
+// fold, purely for comparison, then discards them.
+// =============================================================================
+function dayFlipRate(rows, cutsFn, testStartIdx, testEndIdx){
+  // cutsFn(dayIdx) -> cuts to use for that day (lets regime-split pick
+  // hi/lo cuts per day's own regime; pooled just returns the same cuts always)
+  let flips=0, pairs=0, prevBucket=null;
+  for(let d=testStartIdx; d<=testEndIdx; d++){
+    const score = ShockRecovery.computeScore(rows, d);
+    const cuts = cutsFn(d);
+    const bk = (score===null || !cuts) ? null : bucketOf(score, cuts);
+    if(bk!==null && prevBucket!==null){ pairs++; if(bk!==prevBucket) flips++; }
+    if(bk!==null) prevBucket = bk;
+  }
+  return pairs>0 ? flips/pairs : null;
+}
+
+function runRegimeSplitDiagnostic(){
+  if(!R) return;
+  const out = $("regimeDiagOut");
+  out.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:12px 0;">Running walk-forward folds\u2026</div>';
+  setTimeout(()=>{
+    try{
+      const {rows, eligible, minSamplesPerBucket} = R;
+      const minSamples = minSamplesPerBucket || 5;
+      const cyc = eligible.slice().sort((a,b)=>a.anchorIdx-b.anchorIdx);
+      const NFOLDS = 5;
+      if(cyc.length < NFOLDS*4){
+        out.innerHTML = '<div style="font-size:12px;color:var(--red);padding:12px 0;">Not enough cycles for a reliable walk-forward comparison (need more history).</div>';
+        return;
+      }
+      const foldSize = Math.floor(cyc.length/NFOLDS);
+      const pooledAgg = { Low:{blast:0,miss:0}, Medium:{blast:0,miss:0}, High:{blast:0,miss:0} };
+      const regimeAgg  = { Low:{blast:0,miss:0}, Medium:{blast:0,miss:0}, High:{blast:0,miss:0} };
+      let pooledFlipSum=0, pooledFlipN=0, regimeFlipSum=0, regimeFlipN=0;
+      let foldsRun=0, foldsSkippedRegime=0;
+
+      for(let f=1; f<NFOLDS; f++){
+        const trainEnd = foldSize*f;               // expanding window
+        const testStart = trainEnd, testEnd = (f===NFOLDS-1)? cyc.length : foldSize*(f+1);
+        const train = cyc.slice(0, trainEnd);
+        const test  = cyc.slice(testStart, testEnd);
+        if(!train.length || !test.length) continue;
+
+        const pooledModel = fitOneBehaviourFromCycles(rows, train, ShockRecovery, minSamples);
+
+        const trainHi = train.filter(c=>c.regime==='HighSptR');
+        const trainLo = train.filter(c=>c.regime==='LowSptR');
+        const enoughRegimeData = trainHi.length>=minSamples*3 && trainLo.length>=minSamples*3;
+        let hiModel=null, loModel=null;
+        if(enoughRegimeData){
+          hiModel = fitOneBehaviourFromCycles(rows, trainHi, ShockRecovery, minSamples);
+          loModel = fitOneBehaviourFromCycles(rows, trainLo, ShockRecovery, minSamples);
+        } else { foldsSkippedRegime++; }
+        foldsRun++;
+
+        test.forEach(c=>{
+          const score = ShockRecovery.computeScore(rows, c.anchorIdx);
+          if(score===null) return;
+          const pbk = bucketOf(score, pooledModel.cuts);
+          pooledAgg[pbk][c.type==='Blast'?'blast':'miss']++;
+          if(enoughRegimeData){
+            const rm = c.regime==='HighSptR' ? hiModel : loModel;
+            const rbk = bucketOf(score, rm.cuts);
+            regimeAgg[rbk][c.type==='Blast'?'blast':'miss']++;
+          }
+        });
+
+        const testStartIdx = test[0].anchorIdx, testEndIdx = test[test.length-1].anchorIdx;
+        const pFlip = dayFlipRate(rows, ()=>pooledModel.cuts, testStartIdx, testEndIdx);
+        if(pFlip!==null){ pooledFlipSum+=pFlip; pooledFlipN++; }
+        if(enoughRegimeData){
+          const rFlip = dayFlipRate(rows, d=>(getRegime(rows,d)==='HighSptR'?hiModel:loModel).cuts, testStartIdx, testEndIdx);
+          if(rFlip!==null){ regimeFlipSum+=rFlip; regimeFlipN++; }
+        }
+      }
+
+      const blastRate = agg => { const b=agg.blast, m=agg.miss, n=b+m; return n? b/n : null; };
+      const pooledSpread = (blastRate(pooledAgg.High)??0) - (blastRate(pooledAgg.Low)??0);
+      const regimeSpread = regimeFlipN>0 ? (blastRate(regimeAgg.High)??0) - (blastRate(regimeAgg.Low)??0) : null;
+      const pooledFlip = pooledFlipN? pooledFlipSum/pooledFlipN : null;
+      const regimeFlip = regimeFlipN? regimeFlipSum/regimeFlipN : null;
+
+      const fmtPct2 = x=> x===null? '\u2014' : (x*100).toFixed(1)+'%';
+      const fmtSpread = x=> x===null? '\u2014' : ((x>=0?'+':'')+(x*100).toFixed(1)+' pts');
+
+      let verdict;
+      if(regimeSpread===null){
+        verdict = `Regime-split could not be tested on ${foldsSkippedRegime}/${foldsRun} fold(s) \u2014 not enough per-regime training samples. Recommendation: <strong>keep pooled model</strong>.`;
+      } else {
+        const betterDiscrimination = regimeSpread > pooledSpread + 0.02; // >2pt improvement to matter
+        const worseStability = regimeFlip!==null && pooledFlip!==null && regimeFlip > pooledFlip + 0.03;
+        if(betterDiscrimination && !worseStability){
+          verdict = `Regime-split improved out-of-sample Blast-rate spread (${fmtSpread(regimeSpread)} vs ${fmtSpread(pooledSpread)}) without meaningfully hurting day-to-day stability. Recommendation: <strong>worth prototyping regime-split further</strong>.`;
+        } else if(worseStability){
+          verdict = `Regime-split raised the day-to-day bucket-flip rate (${fmtPct2(regimeFlip)} vs ${fmtPct2(pooledFlip)}) \u2014 exactly the P9/P10 instability that blocked <code>reversal</code>. Recommendation: <strong>keep pooled model</strong>.`;
+        } else {
+          verdict = `Regime-split did not meaningfully improve discrimination (${fmtSpread(regimeSpread)} vs ${fmtSpread(pooledSpread)}). Recommendation: <strong>keep pooled model</strong> \u2014 added complexity isn't earning its keep.`;
+        }
+      }
+
+      out.innerHTML = `
+        <div class="lib-wrap" style="margin-bottom:14px;">
+          <div class="lib-cols lib-hdr" style="grid-template-columns:1fr 1fr 1fr;"><div>Metric</div><div style="text-align:right">Pooled</div><div style="text-align:right">Regime-split</div></div>
+          <div class="lib-row lib-cols" style="grid-template-columns:1fr 1fr 1fr;"><div>Blast% in High bucket</div><div class="num" style="text-align:right">${fmtPct2(blastRate(pooledAgg.High))}</div><div class="num" style="text-align:right">${regimeSpread===null?'\u2014':fmtPct2(blastRate(regimeAgg.High))}</div></div>
+          <div class="lib-row lib-cols" style="grid-template-columns:1fr 1fr 1fr;"><div>Blast% in Low bucket</div><div class="num" style="text-align:right">${fmtPct2(blastRate(pooledAgg.Low))}</div><div class="num" style="text-align:right">${regimeSpread===null?'\u2014':fmtPct2(blastRate(regimeAgg.Low))}</div></div>
+          <div class="lib-row lib-cols" style="grid-template-columns:1fr 1fr 1fr;"><div>High\u2212Low spread (discrimination, higher=better)</div><div class="num" style="text-align:right;font-weight:700">${fmtSpread(pooledSpread)}</div><div class="num" style="text-align:right;font-weight:700">${fmtSpread(regimeSpread)}</div></div>
+          <div class="lib-row lib-cols" style="grid-template-columns:1fr 1fr 1fr;"><div>Day-to-day bucket-flip rate (lower=better)</div><div class="num" style="text-align:right">${fmtPct2(pooledFlip)}</div><div class="num" style="text-align:right">${fmtPct2(regimeFlip)}</div></div>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Forward-chaining, ${foldsRun} expanding-window fold(s), out-of-sample only. Regime-split skipped on ${foldsSkippedRegime} fold(s) with insufficient per-regime samples.</div>
+        <div class="verdict-text" style="border-top:none;padding-top:0;">${verdict}</div>
+      `;
+    }catch(err){
+      out.innerHTML = '<div style="font-size:12px;color:var(--red);">Diagnostic error: '+err.message+'</div>';
+      console.error(err);
+    }
+  }, 10);
+}
+
+function runDistributionCheck(){
+  if(!R) return;
+  eligible.forEach(c=>{
+    const res = scoreDay(rows, c.anchorIdx, fitted);
+    let bin = Math.floor(res.bri/10); if(bin>9)bin=9; if(bin<0)bin=0;
+    bins[bin].total++; if(c.type==='Blast') bins[bin].blast++;
+  });
+  const hdr = `<div class="lib-cols lib-hdr" style="grid-template-columns:1fr 90px 90px 90px;"><div>BRI Range</div><div style="text-align:right">Total</div><div style="text-align:right">Blast</div><div style="text-align:right">Blast %</div></div>`;
+  const body = bins.map((b,i)=>{
+    const pct = b.total?(b.blast/b.total*100).toFixed(1):'\u2014';
+    return `<div class="lib-row lib-cols" style="grid-template-columns:1fr 90px 90px 90px;"><div>${i*10}\u2013${i*10+10}</div><div class="num" style="text-align:right">${b.total}</div><div class="num" style="text-align:right">${b.blast}</div><div class="num" style="text-align:right;font-weight:600">${pct}${b.total?'%':''}</div></div>`;
+  }).join('');
+  $("calibTable").innerHTML = hdr + body;
+}
+
+function runReplayUI(){
+  if(!R) return;
+  const dateStr = $("replayDate").value.trim();
+  const out = $("replayResult");
+  const {rows, eligible, fitted} = R;
+  const cycle = eligible.find(c=>c.anchorDate===dateStr);
+  if(!cycle){ out.innerHTML = `<div style="color:var(--red);font-size:12px">No cycle anchored on ${dateStr}.</div>`; return; }
+  const res = scoreDay(rows, cycle.anchorIdx, fitted);
+  const status = briStatus(res.bri);
+  out.innerHTML = `
+    <div class="info-row"><span class="ir-label">Date</span><span class="ir-val">${cycle.anchorDate}</span></div>
+    <div class="info-row"><span class="ir-label">BRI</span><span class="ir-val" style="color:${status.color}">${res.bri.toFixed(1)} (${status.label})</span></div>
+    <div class="info-row"><span class="ir-label">Actual Outcome</span><span class="ir-val">${cycle.type}${cycle.daysToBlast?' (Day '+cycle.daysToBlast+')':''}</span></div>
+    <div class="info-row"><span class="ir-label">LogSum</span><span class="ir-val">${res.logSum.toFixed(4)}</span></div>
+    <div class="info-row"><span class="ir-label">Active behaviours</span><span class="ir-val">${res.activeFull.map(e=>e.name+':'+e.bucket).join(', ')||'none'}</span></div>
+  `;
+}
+
+function renderDocumentation(){
+  $("docCard").innerHTML = `
+    <h3>How to plug in a new behaviour</h3>
+    <p>Every behaviour is a plain object registered once with <code>BehaviourEngine.register(...)</code>. Nothing else in this file &mdash; fitting, scoring, LogSum, BRI, or rendering &mdash; needs to change when a behaviour is added, removed, or set to placeholder.</p>
+    <pre>const MyBehaviour = {
+  name: 'myBehaviour',           // unique id
+  description: '...',            // market interpretation, for explainability
+  status: 'active',              // or 'placeholder' until validated
+  computeScore(rows, dayIdx){
+    const w = getRollingWindow(rows, dayIdx); // shared 9-day window
+    if(!w) return null;
+    // ... compute a single continuous number from w ...
+    return score;                // or null if the behaviour is absent today
+  },
+};
+BehaviourEngine.register(MyBehaviour);</pre>
+    <p>Once registered with <code>status:'active'</code>, the engine will automatically: fit training-set-only Low/Medium/High percentile cuts, learn one Laplace-smoothed LR per bucket, and include its logLR in every day's LogSum &mdash; identically to Shock Recovery.</p>
+    <h3 style="margin-top:16px">What must be true before a behaviour is promoted from placeholder to active</h3>
+    <p>Per Engine B Design Specification v1: sufficient samples per bucket (P1), stable coefficients across forward-chaining splits (P6/P8), positive leave-one-out contribution alongside existing active behaviours (P5), numerical robustness against outliers (P7), and &mdash; specifically because this engine must score every trading day &mdash; confirmed day-to-day stability with no meaningful bias between anchor-day and all-day distributions (P9/P10). <code>reversal</code> is currently blocked on P7/P9/P10.</p>
+    <h3 style="margin-top:16px">What did not change from Engine B v6.2</h3>
+    <p>LR calculation (Laplace-smoothed), logLR = ln(LR), LogSum = &sum; logLR, and BRI = 100/(1+e<sup>-LogSum</sup>) are byte-for-byte identical to the previous architecture. This version implements no calibration layer &mdash; that is deferred to a later phase, applied on top of this LogSum exactly as it was previously applied on top of the old Evidence Library's LogSum.</p>
+  `;
+}
+
+// =============================================================================
+// WIRING
+// =============================================================================
+let rawCSV=null;
+document.querySelectorAll(".ds-tab").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    document.querySelectorAll(".ds-tab").forEach(b=>b.classList.remove("active")); btn.classList.add("active");
+    $("dsSrcUrl").style.display=btn.dataset.src==="url"?"block":"none";
+    $("dsSrcFile").style.display=btn.dataset.src==="file"?"block":"none";
+  });
+});
+$("fetchBtn").addEventListener("click",async()=>{
+  const url=$("csvUrl").value.trim(); if(!url)return;
+  const btn=$("fetchBtn"); btn.textContent="Fetching\u2026"; $("errorBar").classList.remove("active");
+  try{
+    const res=await fetch(url,{mode:"cors"}); if(!res.ok)throw new Error("HTTP "+res.status);
+    const text=await res.text(); if(!text||text.length<100)throw new Error("Response too short");
+    rawCSV=text; $("runBtn").disabled=false; btn.textContent="\u2713 Fetched"; btn.style.color="var(--green)";
+    setTimeout(()=>{btn.textContent="Fetch";btn.style.color="";},3500);
+  }catch(err){
+    btn.textContent="Fetch"; $("errorBar").textContent="Fetch failed: "+err.message; $("errorBar").classList.add("active");
+  }
+});
+$("csvInput").addEventListener("change",e=>{
+  const file=e.target.files[0]; if(!file)return;
+  const reader=new FileReader(); reader.onload=ev=>{rawCSV=ev.target.result;$("runBtn").disabled=false;}; reader.readAsText(file);
+});
+$("runBtn").addEventListener("click",()=>{
+  if(!rawCSV)return;
+  const thresh=parseFloat($("blastThresh").value)||2;
+  const minSamples=parseInt($("minSamples").value)||5;
+  $("errorBar").classList.remove("active"); $("statusBar").classList.add("active");
+  $("emptyState").style.display="none"; $("results").classList.remove("active"); $("progressFill").style.width="0%";
+  setTimeout(async()=>{
+    try{
+      const washed=washCSV(rawCSV); showWashReport(washed.report);
+      const onProgress=(label,pct)=>{ $("statusText").textContent=label; $("progressFill").style.width=pct+"%"; };
+      R = await runEngineB(washed.rows, thresh, minSamples, onProgress);
+      $("statusBar").classList.remove("active"); $("results").classList.add("active");
+      renderSummary(); renderToday(); renderBehaviourAnalysis(); renderHistoricalInterpretation(); renderTraderInterpretation(); renderLibTable();
+    }catch(err){
+      $("statusBar").classList.remove("active");
+      $("errorBar").textContent="Engine error: "+err.message; $("errorBar").classList.add("active");
+      $("emptyState").style.display="block";
+      console.error(err);
+    }
+  },10);
+});
+function toggleSetupPanels(){
+  const style=$("autoRunStyle"); style.disabled=!style.disabled;
+  $("showSetupBtn").textContent = style.disabled ? "\u2699 Show Setup" : "\u2699 Hide Setup";
+}
+window.addEventListener("DOMContentLoaded", ()=>{
+  $("fetchBtn").click();
+  const check=setInterval(()=>{ if(!$("runBtn").disabled){ clearInterval(check); $("runBtn").click(); } },300);
+});
+</script>
+</body>
+</html>
