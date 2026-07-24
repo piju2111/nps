@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Engine C v2.0 — Trader Decision &amp; Position Management Layer</title>
+<style>
+:root{--card-bg:#ffffff;--page-bg:#f1f5f9;--border:#e2e8f0;--text-primary:#0f172a;--text-muted:#475569;
+--accent-blue:#2563eb;--accent-green:#16a34a;--accent-amber:#d97706;--accent-red:#dc2626;--accent-purple:#7c3aed;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--page-bg);color:var(--text-primary);font-family:Inter,-apple-system,'Segoe UI',system-ui,sans-serif;font-size:16px;line-height:1.55;padding:16px;letter-spacing:-.01em;}
+.app{max-width:820px;margin:0 auto;}
+h1{font-size:22px;font-weight:800;margin-bottom:2px;}
+.subtitle{color:var(--text-muted);font-size:13px;margin-bottom:20px;}
+.card{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;padding:22px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);}
+.card h2{font-size:13px;font-weight:800;margin-bottom:14px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;}
+input[type=file]{color:var(--text-muted);font-size:14px;}
+button{background:var(--accent-blue);color:#fff;border:none;border-radius:12px;padding:12px 20px;font-size:15px;font-weight:700;cursor:pointer;margin-right:8px;box-shadow:0 1px 2px rgba(0,0,0,.08);}
+button.secondary{background:#f1f5f9;color:var(--text-muted);border:1px solid var(--border);}
+button:disabled{opacity:.4;cursor:not-allowed;}
+.status{font-size:13px;color:var(--text-muted);margin-top:10px;white-space:pre-wrap;}
+.err{color:var(--accent-red);font-size:13px;margin-top:10px;font-weight:600;}
+.verdict-row{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap;}
+.verdict-badge{font-size:1.7rem;font-weight:800;padding:10px 22px;border-radius:16px;letter-spacing:-.01em;white-space:nowrap;}
+.verdict-badge.good{background:#dcfce7;color:#166534;}
+.verdict-badge.wait{background:#f1f5f9;color:#475569;}
+.verdict-badge.avoid{background:#fee2e2;color:#991b1b;}
+.fact-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px;}
+@media(min-width:600px){.fact-grid{grid-template-columns:1fr 1fr 1fr;}}
+.fact-tile{background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:14px 16px;}
+.fact-tile .l{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:5px;}
+.fact-tile .v{font-size:17px;font-weight:800;color:var(--text-primary);}
+.fact-tile .s{font-size:12px;color:var(--text-muted);margin-top:3px;}
+.badge{display:inline-flex;align-items:center;border-radius:999px;font-size:11px;font-weight:800;padding:3px 10px;letter-spacing:.02em;}
+.badge.slate{background:#f1f5f9;color:#334155;}
+.badge.green{background:#dcfce7;color:#166534;}
+.badge.amber{background:#fef3c7;color:#92400e;}
+.badge.red{background:#fee2e2;color:#991b1b;}
+.note{font-size:12.5px;color:var(--text-muted);margin-top:10px;line-height:1.6;}
+.tabs{margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;}
+.tab{background:#f1f5f9;color:var(--text-muted);border:1px solid var(--border);border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;}
+.tab.active{background:var(--text-primary);color:#fff;}
+.tabcontent{display:none;}
+.tabcontent.active{display:block;}
+.doc p{margin-bottom:10px;font-size:14px;color:var(--text-muted);line-height:1.7;}
+.doc strong{color:var(--text-primary);}
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>Engine C v2.0 <span style="font-weight:500;color:var(--text-muted);font-size:15px;">— Trader Decision &amp; Position Management Layer</span></h1>
+  <div class="subtitle">Engine A (unchanged) is the only prediction engine. Engine C translates its output into plain-English trader information — it does not predict anything itself.</div>
+
+  <div class="card" id="statusCard">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <span id="sourceIndicator" style="font-size:13px;color:var(--text-muted)">⚪ Data Source: —</span>
+      <button id="refreshBtn">🔄 Refresh</button>
+      <button id="showUploadBtn" class="secondary">Load Local CSV</button>
+    </div>
+    <div class="verdict-row" id="uploadPanel" style="display:none;margin-top:14px;">
+      <input type="file" id="csvFile" accept=".csv" />
+      <button id="runBtn" disabled>Run</button>
+    </div>
+    <div class="status" id="loadStatus"></div>
+    <div class="err" id="loadErr"></div>
+  </div>
+
+  <div id="results" style="display:none">
+    <div class="tabs">
+      <button class="tab active" data-tab="today">Today</button>
+      <button class="tab" data-tab="position">Open Position</button>
+      <button class="tab" data-tab="docs">How This Works</button>
+    </div>
+
+    <!-- ===================================================================
+         TAB 1 — TODAY: answers Question 1 (timing), Question 2 (historical
+         support), Question 3 (entry decision). Every value here reads
+         directly from Engine A's own existing, unmodified output — no
+         probability is estimated, no confidence score is computed.
+         =================================================================== -->
+    <div class="tabcontent active" id="tab-today">
+
+      <!-- Question 3: Is today a good new entry? -->
+      <div class="card">
+        <h2>Is Today A Good New Entry?</h2>
+        <div class="verdict-row">
+          <span class="verdict-badge" id="verdictBadge">—</span>
+          <span id="verdictNote" style="font-size:13px;color:var(--text-muted)">—</span>
+        </div>
+        <div class="note">Derived directly from Engine A's own existing allocation logic (<code>Recommended_Allocation</code>) — no new decision rule is introduced. STAND DOWN &rarr; Avoid; at or above Engine A's existing 50% relative-rank tier &rarr; Good Entry; the range in between &rarr; Wait.</div>
+      </div>
+
+      <!-- Question 1: When is the next Blast expected? (percentile + cycle timing, NOT a probability) -->
+      <div class="card">
+        <h2>Where Does Today Rank, Historically?</h2>
+        <div class="fact-grid">
+          <div class="fact-tile">
+            <div class="l">Engine A Relative Rank</div>
+            <div class="v" id="factRelRank">—</div>
+            <div class="s">of historically similar setups in this regime</div>
+          </div>
+          <div class="fact-tile">
+            <div class="l">Cycle Day</div>
+            <div class="v" id="factCycleDay">—</div>
+            <div class="s" id="factCycleDaySub">—</div>
+          </div>
+          <div class="fact-tile">
+            <div class="l">Timing Status</div>
+            <div class="v" id="factTimingStatus">—</div>
+            <div class="s" id="factTimingSub">—</div>
+          </div>
+        </div>
+        <div class="note">This is a <strong>rank</strong>, not a probability — no calibration or probability-estimation layer is applied, because none was shown to survive walk-forward validation. Timing Status compares today's Cycle Day against the historical distribution of completed cycle lengths; it is descriptive, not predictive.</div>
+      </div>
+
+      <!-- Question 2: How confident should the trader be? (factual support only, no derived score) -->
+      <div class="card">
+        <h2>Historical Support (Factual, Not Estimated)</h2>
+        <div class="fact-grid">
+          <div class="fact-tile">
+            <div class="l">Similar Historical Setups</div>
+            <div class="v" id="factSimilarN">—</div>
+            <div class="s">same regime &amp; compression stage as today</div>
+          </div>
+          <div class="fact-tile">
+            <div class="l">Historical Blast Rate</div>
+            <div class="v" id="factHistBlastRate">—</div>
+            <div class="s">among those similar setups</div>
+          </div>
+          <div class="fact-tile">
+            <div class="l">Regime</div>
+            <div class="v" id="factRegime">—</div>
+            <div class="s">Engine A's current volatility-percentile regime</div>
+          </div>
+        </div>
+        <div class="note">Every number above is a direct historical count or rate — nothing here is inferred, weighted, or blended. Research during this program did not validate a confidence formula; none is displayed.</div>
+      </div>
+
+    </div>
+
+    <!-- ===================================================================
+         TAB 2 — OPEN POSITION: answers Question 4. Descriptive only. No
+         health score, no drift score, no strengthening/weakening claim of
+         any kind — every one of those was tested during this research
+         program and did not survive walk-forward validation.
+         =================================================================== -->
+    <div class="tabcontent" id="tab-position">
+      <div class="card">
+        <h2>Current Cycle — What Happened At Entry</h2>
+        <div class="fact-grid">
+          <div class="fact-tile"><div class="l">Entry Date</div><div class="v" id="posEntryDate">—</div></div>
+          <div class="fact-tile"><div class="l">Entry Regime</div><div class="v" id="posEntryRegime">—</div></div>
+          <div class="fact-tile"><div class="l">Entry Stage</div><div class="v" id="posEntryStage">—</div></div>
+          <div class="fact-tile"><div class="l">Entry Zone</div><div class="v" id="posEntryZone">—</div></div>
+          <div class="fact-tile"><div class="l">Entry Relative Rank</div><div class="v" id="posEntryRank">—</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Where This Cycle Stands Today</h2>
+        <div class="fact-grid">
+          <div class="fact-tile"><div class="l">Current Cycle Day</div><div class="v" id="posCycleDay">—</div></div>
+          <div class="fact-tile"><div class="l">Timing Status</div><div class="v" id="posTimingStatus">—</div></div>
+          <div class="fact-tile"><div class="l">Historical Avg. Cycle Length</div><div class="v" id="posAvgLength">—</div></div>
+        </div>
+        <div class="note">This tab reports facts only: what the setup looked like when the cycle began, and how today's cycle day compares to history. It does not attempt to judge whether the position has "strengthened" or "weakened" since entry — that specific claim was tested during this research program (using Engine A's own live score, tracked day by day since entry) and was found to be statistically <strong>unreliable</strong> at short horizons. No such score is shown here as a result.</div>
+      </div>
+    </div>
+
+    <!-- ===================================================================
+         TAB 3 — DOCS
+         =================================================================== -->
+    <div class="tabcontent" id="tab-docs">
+      <div class="card doc">
+        <h2>Engine C v2.0 — What Changed And Why</h2>
+        <p><strong>Engine A</strong> is unchanged and remains the only prediction engine in this system. Its Stage/Zone/RRC/BFQ/ZPath/RoC pillars, MasterP, and relative-rank allocation logic are exactly as they were before this redesign — no formula, weight, or threshold was touched.</p>
+        <p><strong>Engine C</strong> is no longer a prediction engine. It was previously a Bayesian-fusion layer combining Engine A with a second engine ("Engine B," a Shock-Recovery-based behaviour model). A multi-stage walk-forward research program tested that fusion — and, independently, Engine B as a standalone predictor, as an added Engine A pillar, as a position-health template, and as a forward monitoring signal — and found no form of it that survived validation without either failing to beat Engine A alone, or in one case producing a result that was <em>significantly worse than random</em>. Engine B, Bayesian fusion, likelihood ratios, trust-based routing, calibration layers, and confidence formulas were all retired as a direct result of that evidence, not by assumption.</p>
+        <p>Engine C's job now is strictly translation: it reads Engine A's own output and presents it as a rank (not a probability), a set of historical counts (not a confidence score), an entry verdict (reusing Engine A's own existing thresholds, not a new decision rule), and a descriptive record of an open position (not a health or trend score). Every one of those restrictions reflects a specific finding from the research program, not a stylistic preference.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+// =============================================================================
+// SECTION 1 — CSV IMPORT + CLEANING (frozen, unchanged from prior versions)
+// =============================================================================
+const MIN_CLEAN_ROWS = 115;
+const LOOKBACK_YEARS = 3;
+const SPIKE_PCT_THRESHOLD = 20;
+
+function cleanDateStr(s) {
+  if (!s) return null;
+  s = String(s).replace(/^\ufeff/g, '').replace(/['"]/g, '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  let m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (m) { const [, d, mo, y] = m; return y + '-' + mo.padStart(2, '0') + '-' + d.padStart(2, '0'); }
+  const dt = new Date(s);
+  if (!isNaN(dt)) return dt.toISOString().slice(0, 10);
+  return null;
+}
+function parseCleanNum(s) {
+  if (s === null || s === undefined || s === '') return null;
+  const n = parseFloat(String(s).replace(/[, ]/g, ''));
+  return isNaN(n) || n <= 0 ? null : n;
+}
+function washRows(rawRows) {
+  const rejected = { noDate: 0, zeroOHLC: 0, badHL: 0, duplicate: 0, spike: 0 };
+  const seenDates = new Set();
+  let prevClose = null, prevOHLC = null;
+  let validRows = [];
+  for (const raw of rawRows) {
+    const keyMap = {};
+    Object.keys(raw).forEach(k => {
+      const wk = String(k).replace(/^\ufeff/g, '').trim().toLowerCase();
+      if (['date', 'open', 'high', 'low', 'close'].includes(wk)) keyMap[wk] = raw[k];
+    });
+    const dk = cleanDateStr(keyMap.date);
+    if (!dk) { rejected.noDate++; continue; }
+    const o = parseCleanNum(keyMap.open), h = parseCleanNum(keyMap.high), l = parseCleanNum(keyMap.low), c = parseCleanNum(keyMap.close);
+    if (!o || !h || !l || !c) { rejected.zeroOHLC++; continue; }
+    if (h < l || c > h || c < l) { rejected.badHL++; continue; }
+    if (seenDates.has(dk)) { rejected.duplicate++; continue; }
+    seenDates.add(dk);
+    const ohlcKey = `${o}_${h}_${l}_${c}`;
+    if (prevOHLC === ohlcKey) { rejected.duplicate++; continue; }
+    prevOHLC = ohlcKey;
+    if (prevClose !== null) {
+      const chgPct = Math.abs(c - prevClose) / prevClose * 100;
+      if (chgPct > SPIKE_PCT_THRESHOLD) { rejected.spike++; prevClose = c; continue; }
+    }
+    prevClose = c;
+    validRows.push({ date: dk, open: o, high: h, low: l, close: c });
+  }
+  const cutoff = new Date();
+  cutoff.setFullYear(cutoff.getFullYear() - LOOKBACK_YEARS);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  const beforeLB = validRows.length;
+  validRows = validRows.filter(r => r.date >= cutoffStr);
+  const removedLookback = beforeLB - validRows.length;
+  validRows.sort((a, b) => new Date(a.date) - new Date(b.date));
+  for (let i = 0; i < validRows.length; i++) {
+    const curr = validRows[i], prev = i > 0 ? validRows[i - 1] : null;
+    curr.TR = prev ? Math.max(curr.high - curr.low, Math.abs(curr.high - prev.close), Math.abs(curr.low - prev.close)) : curr.high - curr.low;
+  }
+  const report = { raw: rawRows.length, clean: validRows.length, dropped: { ...rejected, lookback: removedLookback } };
+  if (validRows.length < MIN_CLEAN_ROWS) {
+    const err = new Error(`After washing, only ${validRows.length} rows remain (need >= ${MIN_CLEAN_ROWS}).`);
+    err.report = report; throw err;
+  }
+  return { rows: validRows, report };
+}
+
+// =============================================================================
+// SECTION 2 — SHARED ATR (frozen, unchanged)
+// =============================================================================
+function atr14(rows, i) {
+  if (i < 13 || i >= rows.length) return null;
+  let sum = 0; for (let j = i - 13; j <= i; j++) sum += rows[j].TR;
+  return sum / 14;
+}
+function atrSpot(rows, i) {
+  const a = atr14(rows, i); if (a === null) return null;
+  const close = rows[i].close; return close > 0 ? a / close : null;
+}
+
+// =============================================================================
+// SECTION 3 — REGIME (canonical, Engine A's own regime only)
+// Engine A's regime is a volatility-percentile classification, unchanged from
+// every prior version. The previous "Regime B" (a second, price-position-based
+// regime definition used only by the now-retired Engine B) is not needed
+// anywhere in this architecture and has been removed.
+// =============================================================================
+function computeAtrSpotP50(rows) {
+  const vals = [];
+  for (let i = 13; i < rows.length - 1; i++) { const v = atrSpot(rows, i); if (v !== null) vals.push(v); }
+  vals.sort((a, b) => a - b);
+  return vals.length ? (vals[Math.floor(vals.length * 0.5)] ?? 0.007) : 0.007;
+}
+function buildRegimeSeriesA(rows) {
+  const atrSpotP50 = computeAtrSpotP50(rows);
+  const raw = new Array(rows.length).fill(null);
+  const confirmed = new Array(rows.length).fill(null);
+  for (let i = 0; i < rows.length; i++) {
+    const v = atrSpot(rows, i);
+    raw[i] = v === null ? null : (v >= atrSpotP50 ? 'HighSptR' : 'LowSptR');
+    if (raw[i] === null) { confirmed[i] = null; continue; }
+    if (i < 3 || raw[i - 1] === null || raw[i - 2] === null) { confirmed[i] = raw[i]; continue; }
+    confirmed[i] = (raw[i] === raw[i - 1] && raw[i - 1] === raw[i - 2]) ? raw[i] : confirmed[i - 1];
+  }
+  return { raw, confirmed, atrSpotP50 };
+}
+
+// =============================================================================
+// SECTION 4 — FEATURE STORE
+// =============================================================================
+function buildFeatureStore(rawRows) {
+  const { rows: cleanRows, report } = washRows(rawRows);
+  const regime = buildRegimeSeriesA(cleanRows);
+  const features = cleanRows.map((r, i) => ({
+    idx: i, date: r.date, open: r.open, high: r.high, low: r.low, close: r.close, TR: r.TR,
+    ATR14: atr14(cleanRows, i), Regime: regime.confirmed[i],
+  }));
+  return { rows: features, report, atrSpotP50: regime.atrSpotP50 };
+}
+
+// =============================================================================
+// SECTION 5 — ENGINE A (FROZEN — unchanged mathematics, verbatim from the
+// validated production version. No formula, weight, or threshold below has
+// been modified as part of this redesign.)
+// =============================================================================
+const NPS_CONFIG = { WEIGHTS: { FAST: 0.50, MID: 1.00, SLOW: 0.25, MISS: -0.5 }, STAND_DOWN_THRESHOLD: 0.25 };
+const REGIME_KEYS = ["HighSptR", "LowSptR"];
+const STAGE_KEYS = [4, 3, 2, 1];
+const ZONE_KEYS = ["Upper Zone", "Middle Zone", "Lower Zone"];
+const RRC_KEYS = ["Deep", "Neutral", "Expansion"];
+const WEEKDAY_KEYS = [1, 2, 3, 4, 5];
+const BFQ_KEYS = ["Normal", "Exhausted"];
+const WOM_KEYS = [1, 2, 3, 4, 5];
+const ZPATH_KEYS = [0, 1, 2];
+const ROC_KEYS = [0, 1, 2];
+
+function getWeekOfMonth(d) { return Math.ceil(new Date(d).getUTCDate() / 7); }
+function classifyRRCState(range3, atr, p33, p66) { const r = atr > 0 ? range3 / atr : 1; return r <= p33 ? "Deep" : r <= p66 ? "Neutral" : "Expansion"; }
+function computeZPath(rawRows, ai, zph20, zpl20) {
+  if (ai < 20) return 0;
+  const zR = zph20 - zpl20;
+  function dzs(c) { if (zR <= 0) return 0; const p = (c - zpl20) / zR; return p >= 0.66 ? 1 : p <= 0.33 ? -1 : 0; }
+  const sc = []; for (let d = 19; d >= 0; d--) sc.push(dzs(rawRows[ai - d].Close));
+  const B1 = (sc[0] + sc[1] + sc[2] + sc[3] + sc[4]) / 5;
+  const B2 = (sc[5] + sc[6] + sc[7] + sc[8] + sc[9]) / 5;
+  const B3 = (sc[10] + sc[11] + sc[12] + sc[13] + sc[14]) / 5;
+  const B4 = (sc[15] + sc[16] + sc[17] + sc[18] + sc[19]) / 5;
+  if (B4 >= 0.3 && B4 >= B3 && B3 >= B2 - 0.1 && B4 > B1) return 2;
+  if (B4 <= -0.3 && B4 <= B3 && B3 <= B2 + 0.1 && B4 < B1) return 1;
+  return 0;
+}
+function computeBFQState(rawRows, anchorIdx) {
+  if (anchorIdx < 20) return "Normal";
+  const atr = rawRows.slice(anchorIdx - 13, anchorIdx + 1).reduce((a, d) => a + d.TR, 0) / 14;
+  let bc = 0;
+  for (let s = 0; s < 7; s++) {
+    const e = anchorIdx - s * 3, st = e - 2; if (st < 0) break;
+    const hi = Math.max(rawRows[st].High, rawRows[st + 1].High, rawRows[e].High);
+    const lo = Math.min(rawRows[st].Low, rawRows[st + 1].Low, rawRows[e].Low);
+    if (atr > 0 && (hi - lo) > 2 * atr) bc++;
+  }
+  return bc <= 2 ? "Normal" : "Exhausted";
+}
+function computeRoCGrid(rawRows, anchorIdx, atrVal) {
+  if (anchorIdx < 16) return 0;
+  const internalScores = []; const threshold = (atrVal / rawRows[anchorIdx].Close) * 100 * 0.5;
+  for (let d = 13; d >= 0; d--) {
+    const idx = anchorIdx - d; const cNow = rawRows[idx].Close; const cPrev3 = rawRows[idx - 3] ? rawRows[idx - 3].Close : null;
+    if (!cPrev3 || cPrev3 <= 0) { internalScores.push(0); continue; }
+    const roc3 = ((cNow - cPrev3) / cPrev3) * 100;
+    if (roc3 >= threshold) internalScores.push(1); else if (roc3 <= -threshold) internalScores.push(-1); else internalScores.push(0);
+  }
+  const B1 = (internalScores[0] + internalScores[1] + internalScores[2] + internalScores[3]) / 4;
+  const B2 = (internalScores[4] + internalScores[5] + internalScores[6] + internalScores[7] + internalScores[8] + internalScores[9]) / 6;
+  const B3 = (internalScores[10] + internalScores[11] + internalScores[12] + internalScores[13]) / 4;
+  if (B3 >= 0.25 && B3 >= B2 && B2 >= B1) return 2;
+  if (B3 <= -0.25 || (B1 > 0.1 && B3 < B1 - 0.5)) return 1;
+  return 0;
+}
+function velocityWeight(bd, hit, velFastCut, velMidCut) { if (!hit || bd === 0) return NPS_CONFIG.WEIGHTS.MISS; if (bd <= velFastCut) return NPS_CONFIG.WEIGHTS.FAST; if (bd <= velMidCut) return NPS_CONFIG.WEIGHTS.MID; return NPS_CONFIG.WEIGHTS.SLOW; }
+function bucketVelocityScore(outcomes, velFastCut, velMidCut) {
+  if (!outcomes.length) return { score: 0, pillarScore: 0, fast: 0, mid: 0, slow: 0, miss: 0, total: 0, raw: 0 };
+  let fast = 0, mid = 0, slow = 0, miss = 0, rawScore = 0;
+  outcomes.forEach(o => {
+    let w = velocityWeight(o.blastDay, o.hit, velFastCut, velMidCut); rawScore += w;
+    if (!o.hit || o.blastDay === 0) miss++; else if (o.blastDay <= velFastCut) fast++; else if (o.blastDay <= velMidCut) mid++; else slow++;
+  });
+  const score = rawScore / outcomes.length;
+  return { score, pillarScore: Math.min(100, score * 100), fast, mid, slow, miss, total: outcomes.length, raw: rawScore };
+}
+function getPrecisionWeight(outcomes, velFastCut, velMidCut) {
+  const MIN_SAMPLES = 5, VARIANCE_FLOOR = 0.02;
+  if (!outcomes || outcomes.length < MIN_SAMPLES) return 0;
+  const n = outcomes.length;
+  const scores = outcomes.map(o => velocityWeight(o.blastDay, o.hit, velFastCut, velMidCut));
+  const mean = scores.reduce((sum, s) => sum + s, 0) / n;
+  const variance = scores.reduce((sum, s) => sum + Math.pow(s - mean, 2), 0) / n;
+  return n / Math.max(variance, VARIANCE_FLOOR);
+}
+function initConditionalStats() {
+  const analyticsStats = { conditionalStage: {}, conditionalZone: {}, conditionalRRC: {}, conditionalWeekday: {}, conditionalBFQ: {}, conditionalWOM: {}, conditionalZPath: {}, conditionalRoC: {}, regime: { "HighSptR": { outcomes: [] }, "LowSptR": { outcomes: [] } } };
+  REGIME_KEYS.forEach(r => {
+    analyticsStats.conditionalStage[r] = {}; analyticsStats.conditionalZone[r] = {}; analyticsStats.conditionalRRC[r] = {};
+    analyticsStats.conditionalWeekday[r] = {}; analyticsStats.conditionalBFQ[r] = {}; analyticsStats.conditionalWOM[r] = {}; analyticsStats.conditionalZPath[r] = {}; analyticsStats.conditionalRoC[r] = {};
+    STAGE_KEYS.forEach(s => analyticsStats.conditionalStage[r][s] = { outcomes: [] });
+    ZONE_KEYS.forEach(z => analyticsStats.conditionalZone[r][z] = { outcomes: [] });
+    RRC_KEYS.forEach(rrc => analyticsStats.conditionalRRC[r][rrc] = { outcomes: [] });
+    WEEKDAY_KEYS.forEach(wd => analyticsStats.conditionalWeekday[r][wd] = { outcomes: [] });
+    BFQ_KEYS.forEach(bfq => analyticsStats.conditionalBFQ[r][bfq] = { outcomes: [] });
+    WOM_KEYS.forEach(wom => analyticsStats.conditionalWOM[r][wom] = { outcomes: [] });
+    ZPATH_KEYS.forEach(zp => analyticsStats.conditionalZPath[r][zp] = { outcomes: [] });
+    ROC_KEYS.forEach(roc => analyticsStats.conditionalRoC[r][String(roc)] = { outcomes: [] });
+  });
+  return analyticsStats;
+}
+function ProbabilityEngine(stage, zone, regimeState, rrcState, weekday, bfqState, womState, zpathState, rocState, analyticsStats, velFastCut, velMidCut) {
+  function pillarShrink(outcomes) {
+    if (!outcomes.length) return { pillarScore: 0, rawScore: 0, vs: bucketVelocityScore([], velFastCut, velMidCut), n: 0 };
+    const vs = bucketVelocityScore(outcomes, velFastCut, velMidCut);
+    return { pillarScore: Math.min(100, vs.pillarScore), rawScore: vs.pillarScore, vs, n: outcomes.length };
+  }
+  const csOut = ((analyticsStats.conditionalStage[regimeState] || {})[stage] || { outcomes: [] }).outcomes;
+  const stagePillar = pillarShrink(csOut); const stageSamples = csOut.length;
+  const czOut = ((analyticsStats.conditionalZone[regimeState] || {})[zone] || { outcomes: [] }).outcomes;
+  const zonePillar = pillarShrink(czOut); const zoneSamples = czOut.length;
+  const rrcKey = rrcState || "Neutral"; const crOut = ((analyticsStats.conditionalRRC[regimeState] || {})[rrcKey] || { outcomes: [] }).outcomes;
+  const rrcPillar = pillarShrink(crOut); const rrcSamples = crOut.length;
+  const wdKey = (weekday !== null && weekday !== undefined) ? weekday : 0;
+  const cwOut = (wdKey >= 1 && wdKey <= 5 && (analyticsStats.conditionalWeekday[regimeState] || {})[wdKey]) ? analyticsStats.conditionalWeekday[regimeState][wdKey].outcomes : [];
+  const weekdayPillar = pillarShrink(cwOut); const weekdaySamples = cwOut.length;
+  const bfqKey = bfqState || "Normal"; const cbOut = ((analyticsStats.conditionalBFQ[regimeState] || {})[bfqKey] || { outcomes: [] }).outcomes;
+  const bfqPillar = pillarShrink(cbOut); const bfqSamples = cbOut.length;
+  const womKey = womState || 1; const cwomOut = ((analyticsStats.conditionalWOM[regimeState] || {})[womKey] || { outcomes: [] }).outcomes;
+  const womPillar = pillarShrink(cwomOut); const womSamples = cwomOut.length;
+  const zpKey = zpathState !== undefined ? zpathState : 0; const czpOut = ((analyticsStats.conditionalZPath[regimeState] || {})[zpKey] || { outcomes: [] }).outcomes;
+  const zpathPillar = pillarShrink(czpOut); const zpathSamples = czpOut.length;
+  const rocKey = String((rocState !== undefined && rocState !== null) ? rocState : 0); const crocOut = ((analyticsStats.conditionalRoC[regimeState] || {})[rocKey] || { outcomes: [] }).outcomes;
+  const rocPillar = pillarShrink(crocOut); const rocSamples = crocOut.length;
+
+  const w_stage = getPrecisionWeight(csOut, velFastCut, velMidCut);
+  const w_zone = getPrecisionWeight(czOut, velFastCut, velMidCut);
+  const w_zpath = getPrecisionWeight(czpOut, velFastCut, velMidCut);
+  const w_rrc = getPrecisionWeight(crOut, velFastCut, velMidCut);
+  const w_bfq = getPrecisionWeight(cbOut, velFastCut, velMidCut);
+  const w_weekday = getPrecisionWeight(cwOut, velFastCut, velMidCut);
+  const w_wom = getPrecisionWeight(cwomOut, velFastCut, velMidCut);
+  const w_roc = getPrecisionWeight(crocOut, velFastCut, velMidCut);
+  const totalWeight = w_stage + w_zone + w_zpath + w_rrc + w_bfq + w_weekday + w_wom + w_roc;
+
+  let masterP = 50;
+  if (totalWeight > 0) {
+    masterP = ((stagePillar.pillarScore * w_stage) + (zonePillar.pillarScore * w_zone) + (zpathPillar.pillarScore * w_zpath) +
+      (rrcPillar.pillarScore * w_rrc) + (bfqPillar.pillarScore * w_bfq) + (weekdayPillar.pillarScore * w_weekday) +
+      (womPillar.pillarScore * w_wom) + (rocPillar.pillarScore * w_roc)) / totalWeight;
+  }
+  const regOutcomes = (analyticsStats.regime[regimeState] || { outcomes: [] }).outcomes;
+  const regimeSamples = regOutcomes.length;
+  return {
+    masterP, stageSamples, zoneSamples, rrcSamples, weekdaySamples, bfqSamples, womSamples, zpathSamples, rocSamples, regimeSamples,
+    stageOutcomes: csOut, zoneOutcomes: czOut,
+  };
+}
+function getDynamicAllocation(score, currentRegime, historicalScoreBounds) {
+  const rKey = (currentRegime === "HighSptR" || currentRegime === "LowSptR") ? currentRegime : "LowSptR";
+  const mn = historicalScoreBounds[rKey].min, mx = historicalScoreBounds[rKey].max, range = mx - mn;
+  if (range <= 0) return { mult: "STAND DOWN", multiplier: 0, relPct: 0, note: `Degenerate score range for ${rKey}.` };
+  const relPct = Math.max(0, Math.min(1, (score - mn) / range));
+  let threshold = NPS_CONFIG.STAND_DOWN_THRESHOLD;
+  if (rKey === "HighSptR") threshold = 0.15;
+  if (rKey === "LowSptR") threshold = 0.35;
+  if (relPct < threshold) return { mult: "STAND DOWN", multiplier: 0, relPct, note: `Relative score ${(relPct * 100).toFixed(1)}% — below adaptive ${rKey} floor.` };
+  const multiplier = parseFloat(relPct.toFixed(2));
+  return { mult: `Max_Limit * ${multiplier.toFixed(2)}`, multiplier, relPct, note: `Score ranks at ${(relPct * 100).toFixed(1)}% of local historical ${rKey} range.` };
+}
+
+function runEngineA(featureStoreRows) {
+  const rawRows = featureStoreRows.map(r => ({ Date: r.date, computedDateStr: r.date, Open: r.open, High: r.high, Low: r.low, Close: r.close, TR: r.TR, _regime: r.Regime }));
+  if (rawRows.length < 115) throw new Error(`Engine A needs >=115 rows, got ${rawRows.length}`);
+
+  let allBD = [];
+  { let p = 100; while (p < rawRows.length - 10) {
+      const a14 = rawRows.slice(p - 14, p).reduce((s, d) => s + d.TR, 0) / 14;
+      const ac = rawRows[p - 1].Close; let bd = 0, hit = 0;
+      for (let di = 0; p + di < rawRows.length; di++) {
+        const fr = rawRows[p + di], mm = Math.max(Math.abs(fr.High - ac), Math.abs(ac - fr.Low));
+        if (a14 > 0 && mm / a14 >= 2) { bd = di + 1; hit = 1; break; }
+      }
+      if (hit) { allBD.push(bd); p += bd; } else p++;
+    }
+  }
+  allBD.sort((a, b) => a - b);
+  let velFastCut = allBD[Math.floor(allBD.length * 0.33)] ?? 3;
+  let velMidCut = allBD[Math.floor(allBD.length * 0.66)] ?? 6;
+  if (velFastCut >= velMidCut) { velFastCut = 3; velMidCut = 6; }
+
+  let allRRC = [];
+  for (let k = 105; k < rawRows.length - 10; k++) {
+    const ai = k - 1;
+    const r3h = Math.max(...rawRows.slice(ai - 2, ai + 1).map(d => d.High)), r3l = Math.min(...rawRows.slice(ai - 2, ai + 1).map(d => d.Low));
+    const a14 = rawRows.slice(ai - 13, ai + 1).reduce((s, d) => s + d.TR, 0) / 14;
+    allRRC.push(a14 > 0 ? (r3h - r3l) / a14 : 1);
+  }
+  allRRC.sort((a, b) => a - b);
+  let rrcP33 = allRRC[Math.floor(allRRC.length * 0.33)] ?? 0.4;
+  let rrcP66 = allRRC[Math.floor(allRRC.length * 0.66)] ?? 0.8;
+  if (rrcP33 >= rrcP66) { rrcP33 = 0.4; rrcP66 = 0.8; }
+
+  let processed = [], dateLookupMap = {};
+  let i = 100;
+  while (i < rawRows.length) {
+    const ai = i - 1;
+    const h3 = Math.max(...rawRows.slice(ai - 2, ai + 1).map(d => d.High)), l3 = Math.min(...rawRows.slice(ai - 2, ai + 1).map(d => d.Low));
+    const ph5 = Math.max(...rawRows.slice(ai - 7, ai - 2).map(d => d.High)), pl5 = Math.min(...rawRows.slice(ai - 7, ai - 2).map(d => d.Low));
+    const h5 = Math.max(...rawRows.slice(ai - 4, ai + 1).map(d => d.High)), l5 = Math.min(...rawRows.slice(ai - 4, ai + 1).map(d => d.Low));
+    const ph10 = Math.max(...rawRows.slice(ai - 14, ai - 4).map(d => d.High)), pl10 = Math.min(...rawRows.slice(ai - 14, ai - 4).map(d => d.Low));
+    const h10 = Math.max(...rawRows.slice(ai - 9, ai + 1).map(d => d.High)), l10 = Math.min(...rawRows.slice(ai - 9, ai + 1).map(d => d.Low));
+    const ph20 = Math.max(...rawRows.slice(ai - 29, ai - 9).map(d => d.High)), pl20 = Math.min(...rawRows.slice(ai - 29, ai - 9).map(d => d.Low));
+    const zph20 = Math.max(...rawRows.slice(ai - 20, ai).map(d => d.High)), zpl20 = Math.min(...rawRows.slice(ai - 20, ai).map(d => d.Low));
+    const atr = rawRows.slice(ai - 13, ai + 1).reduce((s, d) => s + d.TR, 0) / 14;
+    const tm = ((h3 - l3) < (ph5 - pl5) ? 1 : 0) + ((h5 - l5) < (ph10 - pl10) ? 1 : 0) + ((h10 - l10) < (ph20 - pl20) ? 1 : 0);
+    const stage = tm === 3 ? 4 : tm === 2 ? 3 : tm === 1 ? 2 : 1;
+    const ac = rawRows[ai].Close; const regimeState = rawRows[ai]._regime;
+    const pos20 = (zph20 - zpl20) > 0 ? (ac - zpl20) / (zph20 - zpl20) : 0.5;
+    const zone = pos20 <= 0.33 ? "Lower Zone" : pos20 >= 0.66 ? "Upper Zone" : "Middle Zone";
+    const rrcState = classifyRRCState(h3 - l3, atr, rrcP33, rrcP66);
+    const zpathState = computeZPath(rawRows, ai, zph20, zpl20);
+    const rocState = computeRoCGrid(rawRows, ai, atr);
+    const futureSlice = rawRows.slice(i, i + 10); let expHit = 0, blastDay = 0; const hasFuture = futureSlice.length === 10;
+    if (hasFuture) { for (let di = 0; di < futureSlice.length; di++) { const fr = futureSlice[di], mm = Math.max(Math.abs(fr.High - ac), Math.abs(ac - fr.Low)); if (atr > 0 && mm / atr >= 2 && blastDay === 0) { blastDay = di + 1; expHit = 1; } } }
+    const dKey = rawRows[i].computedDateStr;
+    const row = { Date: dKey, Close: ac, Stage: stage, Zone: zone, RegimeState: regimeState, RRCState: rrcState, BFQState: computeBFQState(rawRows, ai), ZPathState: zpathState, RoCState: rocState, ExpansionHit: expHit, BlastDay: blastDay, HasFutureData: hasFuture };
+    processed.push(row); dateLookupMap[dKey] = row;
+    const adv = hasFuture && expHit && blastDay > 0 ? blastDay : hasFuture ? 10 : 1;
+    for (let skip = 1; skip < adv; skip++) {
+      const si = i + skip; if (si >= rawRows.length) break;
+      const sk = rawRows[si].computedDateStr; if (dateLookupMap[sk]) continue;
+      const sai = si - 1;
+      const sh3 = Math.max(...rawRows.slice(sai - 2, sai + 1).map(d => d.High)), sl3 = Math.min(...rawRows.slice(sai - 2, sai + 1).map(d => d.Low));
+      const szph20 = Math.max(...rawRows.slice(sai - 20, sai).map(d => d.High)), szpl20 = Math.min(...rawRows.slice(sai - 20, sai).map(d => d.Low));
+      const sph5 = Math.max(...rawRows.slice(sai - 7, sai - 2).map(d => d.High)), spl5 = Math.min(...rawRows.slice(sai - 7, sai - 2).map(d => d.Low));
+      const sh5 = Math.max(...rawRows.slice(sai - 4, sai + 1).map(d => d.High)), sl5 = Math.min(...rawRows.slice(sai - 4, sai + 1).map(d => d.Low));
+      const sph10 = Math.max(...rawRows.slice(sai - 14, sai - 4).map(d => d.High)), spl10 = Math.min(...rawRows.slice(sai - 14, sai - 4).map(d => d.Low));
+      const sh10 = Math.max(...rawRows.slice(sai - 9, sai + 1).map(d => d.High)), sl10 = Math.min(...rawRows.slice(sai - 9, sai + 1).map(d => d.Low));
+      const sph20 = Math.max(...rawRows.slice(sai - 29, sai - 9).map(d => d.High)), spl20 = Math.min(...rawRows.slice(sai - 29, sai - 9).map(d => d.Low));
+      const stm = ((sh3 - sl3) < (sph5 - spl5) ? 1 : 0) + ((sh5 - sl5) < (sph10 - spl10) ? 1 : 0) + ((sh10 - sl10) < (sph20 - spl20) ? 1 : 0);
+      const sS = stm === 3 ? 4 : stm === 2 ? 3 : stm === 1 ? 2 : 1;
+      const sAC = rawRows[sai].Close, sPos = (szph20 - szpl20) > 0 ? (sAC - szpl20) / (szph20 - szpl20) : 0.5;
+      const sZ = sPos <= 0.33 ? "Lower Zone" : sPos >= 0.66 ? "Upper Zone" : "Middle Zone";
+      const satr = rawRows.slice(sai - 13, sai + 1).reduce((s, d) => s + d.TR, 0) / 14;
+      const sRRC = classifyRRCState(sh3 - sl3, satr, rrcP33, rrcP66), sZPath = computeZPath(rawRows, sai, szph20, szpl20);
+      const sRoCState = computeRoCGrid(rawRows, sai, satr); const sRegime = rawRows[sai]._regime;
+      const sRow = { Date: sk, Close: sAC, Stage: sS, Zone: sZ, RegimeState: sRegime, RRCState: sRRC, BFQState: computeBFQState(rawRows, sai), ZPathState: sZPath, RoCState: sRoCState, ExpansionHit: 0, BlastDay: 0, HasFutureData: false };
+      dateLookupMap[sk] = sRow; processed.push(sRow);
+    }
+    i += adv;
+  }
+
+  const analyticsStats = initConditionalStats();
+  let j = 100;
+  while (j < rawRows.length - 10) {
+    const ai = j - 1;
+    const h3 = Math.max(...rawRows.slice(ai - 2, ai + 1).map(r => r.High)), l3 = Math.min(...rawRows.slice(ai - 2, ai + 1).map(r => r.Low));
+    const ph5 = Math.max(...rawRows.slice(ai - 7, ai - 2).map(r => r.High)), pl5 = Math.min(...rawRows.slice(ai - 7, ai - 2).map(r => r.Low));
+    const h5 = Math.max(...rawRows.slice(ai - 4, ai + 1).map(r => r.High)), l5 = Math.min(...rawRows.slice(ai - 4, ai + 1).map(r => r.Low));
+    const ph10 = Math.max(...rawRows.slice(ai - 14, ai - 4).map(r => r.High)), pl10 = Math.min(...rawRows.slice(ai - 14, ai - 4).map(r => r.Low));
+    const h10 = Math.max(...rawRows.slice(ai - 9, ai + 1).map(r => r.High)), l10 = Math.min(...rawRows.slice(ai - 9, ai + 1).map(r => r.Low));
+    const ph20 = Math.max(...rawRows.slice(ai - 29, ai - 9).map(r => r.High)), pl20 = Math.min(...rawRows.slice(ai - 29, ai - 9).map(r => r.Low));
+    const zph20 = Math.max(...rawRows.slice(ai - 20, ai).map(r => r.High)), zpl20 = Math.min(...rawRows.slice(ai - 20, ai).map(r => r.Low));
+    const a14 = rawRows.slice(ai - 13, ai + 1).reduce((s, r) => s + r.TR, 0) / 14;
+    const tm = ((h3 - l3) < (ph5 - pl5) ? 1 : 0) + ((h5 - l5) < (ph10 - pl10) ? 1 : 0) + ((h10 - l10) < (ph20 - pl20) ? 1 : 0);
+    const stg = tm === 3 ? 4 : tm === 2 ? 3 : tm === 1 ? 2 : 1;
+    const ac = rawRows[ai].Close, p20 = (zph20 - zpl20) > 0 ? (ac - zpl20) / (zph20 - zpl20) : 0.5;
+    const zn = p20 <= 0.33 ? "Lower Zone" : p20 >= 0.66 ? "Upper Zone" : "Middle Zone";
+    const rs = rawRows[ai]._regime;
+    const rrcJ = classifyRRCState(h3 - l3, a14, rrcP33, rrcP66), bfqJ = computeBFQState(rawRows, ai), zpathJ = computeZPath(rawRows, ai, zph20, zpl20);
+    const rocJ = computeRoCGrid(rawRows, ai, a14);
+    let ehj = 0, bdj = 0;
+    for (let di = 0; di < 10; di++) { const fr = rawRows[j + di]; if (!fr) break; const mm = Math.max(Math.abs(fr.High - ac), Math.abs(ac - fr.Low)); if (a14 > 0 && mm / a14 >= 2 && bdj === 0) { bdj = di + 1; ehj = 1; } }
+    const outcome = { hit: ehj, blastDay: bdj };
+    const wdJ = new Date(rawRows[j].computedDateStr).getUTCDay(), womJ = getWeekOfMonth(rawRows[j].computedDateStr);
+    if (analyticsStats.regime[rs]) analyticsStats.regime[rs].outcomes.push(outcome);
+    if (analyticsStats.conditionalStage[rs]?.[stg]) analyticsStats.conditionalStage[rs][stg].outcomes.push(outcome);
+    if (analyticsStats.conditionalZone[rs]?.[zn]) analyticsStats.conditionalZone[rs][zn].outcomes.push(outcome);
+    if (rrcJ && analyticsStats.conditionalRRC[rs]?.[rrcJ]) analyticsStats.conditionalRRC[rs][rrcJ].outcomes.push(outcome);
+    if (wdJ >= 1 && wdJ <= 5 && analyticsStats.conditionalWeekday[rs]?.[wdJ]) analyticsStats.conditionalWeekday[rs][wdJ].outcomes.push(outcome);
+    if (bfqJ && analyticsStats.conditionalBFQ[rs]?.[bfqJ]) analyticsStats.conditionalBFQ[rs][bfqJ].outcomes.push(outcome);
+    if (womJ && analyticsStats.conditionalWOM[rs]?.[womJ]) analyticsStats.conditionalWOM[rs][womJ].outcomes.push(outcome);
+    if (analyticsStats.conditionalZPath[rs]?.[zpathJ] !== undefined) analyticsStats.conditionalZPath[rs][zpathJ].outcomes.push(outcome);
+    if (rocJ !== undefined && rocJ !== null && analyticsStats.conditionalRoC[rs]?.[rocJ] !== undefined) analyticsStats.conditionalRoC[rs][String(rocJ)].outcomes.push(outcome);
+    j += ehj ? bdj : 10;
+  }
+
+  processed.forEach(row => {
+    const wd = new Date(row.Date).getUTCDay();
+    const prob = ProbabilityEngine(row.Stage, row.Zone, row.RegimeState, row.RRCState, wd, row.BFQState, getWeekOfMonth(row.Date), row.ZPathState || 0, row.RoCState ?? 0, analyticsStats, velFastCut, velMidCut);
+    row.MasterP = prob.masterP; row._prob = prob;
+  });
+
+  let historicalScoreBounds = { "HighSptR": { min: Infinity, max: -Infinity }, "LowSptR": { min: Infinity, max: -Infinity } };
+  processed.forEach(row => {
+    const prob = row._prob;
+    if (prob.regimeSamples < 5) return;
+    const rKey = (row.RegimeState === "HighSptR" || row.RegimeState === "LowSptR") ? row.RegimeState : "HighSptR";
+    if (prob.masterP < historicalScoreBounds[rKey].min) historicalScoreBounds[rKey].min = prob.masterP;
+    if (prob.masterP > historicalScoreBounds[rKey].max) historicalScoreBounds[rKey].max = prob.masterP;
+  });
+  REGIME_KEYS.forEach(r => { if (!isFinite(historicalScoreBounds[r].min)) historicalScoreBounds[r] = { min: 0, max: 100 }; });
+
+  processed.forEach(row => {
+    const prob = row._prob;
+    const ok = prob.regimeSamples >= 5;
+    const band = ok ? getDynamicAllocation(prob.masterP, row.RegimeState, historicalScoreBounds) : { mult: "STAND DOWN", multiplier: 0, relPct: 0, note: "Insufficient pillar history." };
+    row.Relative_Score_Pct = ok ? (band.relPct * 100).toFixed(1) + "%" : "—";
+    row.Recommended_Allocation = band.mult;
+    row.RelativeRankPct = ok ? band.relPct : null;
+  });
+
+  return { processed, analyticsStats, historicalScoreBounds };
+}
+
+// =============================================================================
+// SECTION 6 — CYCLE BOUNDARY DETECTOR (ground-truth historical labeling only)
+// This is NOT a prediction engine and NOT "Engine B." It labels where, in
+// history, a 2xATR move within 10 trading days actually occurred — the same
+// fixed, frozen outcome definition already used inside Engine A's own
+// analytics loop above. It exists solely so Cycle Intelligence (Section 7)
+// can describe "how many days into the current cycle are we," which is a
+// historical-fact question, not a prediction. No Shock Recovery, Likelihood
+// Ratio, or BRI computation of any kind happens here.
+// =============================================================================
+function detectHistoricalCycles(rows, thresh) {
+  const WARMUP_ROWS = 100, FORWARD_WINDOW = 10;
+  const cycles = []; let p = WARMUP_ROWS;
+  while (p < rows.length - FORWARD_WINDOW) {
+    const a14 = rows.slice(p - 14, p).reduce((s, d) => s + d.TR, 0) / 14;
+    const anchorIdx = p - 1; const ac = rows[anchorIdx].close;
+    let blastDay = -1;
+    for (let di = 0; di < FORWARD_WINDOW && p + di < rows.length; di++) {
+      const fr = rows[p + di]; const mm = Math.max(Math.abs(fr.high - ac), Math.abs(ac - fr.low));
+      if (a14 > 0 && mm / a14 >= thresh) { blastDay = di; break; }
+    }
+    if (blastDay >= 0) {
+      const blastIdx = p + blastDay;
+      cycles.push({ anchorIdx, anchorDate: rows[anchorIdx].date, type: 'Blast', blastIdx, blastDate: rows[blastIdx].date });
+      p = blastIdx + 1;
+    } else {
+      cycles.push({ anchorIdx, anchorDate: rows[anchorIdx].date, type: 'Miss', blastIdx: null, blastDate: null });
+      p += FORWARD_WINDOW;
+    }
+  }
+  return cycles;
+}
+
+// =============================================================================
+// SECTION 7 — CYCLE INTELLIGENCE (descriptive only)
+// A "trading cycle" runs from the day after one validated Blast to (and
+// including) the next validated Blast. Purely descriptive: cycle boundaries,
+// completed-cycle lengths, and where today sits relative to that history.
+// Nothing here estimates a probability or a health/trend score.
+// =============================================================================
+function buildCycleBoundaries(historicalCycles, totalDays) {
+  const boundaries = []; let cycleId = 1, segStart = 0;
+  const sorted = [...historicalCycles].sort((a, b) => a.anchorIdx - b.anchorIdx);
+  for (const c of sorted) {
+    if (c.type === 'Blast') {
+      boundaries.push({ cycleId, startIdx: segStart, endIdx: c.blastIdx, blastDate: c.blastDate, isComplete: true });
+      cycleId++; segStart = c.blastIdx + 1;
+    }
+  }
+  if (segStart <= totalDays - 1) boundaries.push({ cycleId, startIdx: segStart, endIdx: totalDays - 1, blastDate: null, isComplete: false });
+  return boundaries;
+}
+function buildCycleIntelligence(featureStoreRows, engineAProcessed, historicalCycles) {
+  const n = featureStoreRows.length;
+  const boundaries = buildCycleBoundaries(historicalCycles, n);
+  const aByDate = new Map(engineAProcessed.map(r => [r.Date, r]));
+  const completedLengths = boundaries.filter(b => b.isComplete).map(b => b.endIdx - b.startIdx + 1);
+  const currentBoundary = boundaries[boundaries.length - 1]; // always the open (incomplete) one, or the last if data ends exactly on a blast
+  const entryDate = featureStoreRows[currentBoundary.startIdx].date;
+  const entryRow = aByDate.get(entryDate) || null;
+  const todayIdx = n - 1;
+  const currentCycleDay = todayIdx - currentBoundary.startIdx + 1;
+  return {
+    completedCycleCount: completedLengths.length,
+    avgCycleLength: completedLengths.length ? +(completedLengths.reduce((a, b) => a + b, 0) / completedLengths.length).toFixed(1) : null,
+    shortestCycleLength: completedLengths.length ? Math.min(...completedLengths) : null,
+    longestCycleLength: completedLengths.length ? Math.max(...completedLengths) : null,
+    currentCycleDay, entryDate, entryRow,
+  };
+}
+// Timing status: a plain comparison of today's cycle day against the
+// historical distribution of completed cycle lengths. Descriptive, not
+// predictive — it does not estimate a probability of anything.
+function timingStatus(cycleDay, avgLength, longestLength) {
+  if (!avgLength) return { label: 'Building', note: 'no completed historical cycles yet' };
+  if (cycleDay < 0.4 * avgLength) return { label: 'Early', cls: 'green' };
+  if (cycleDay < avgLength) return { label: 'On Schedule', cls: 'green' };
+  if (!longestLength || cycleDay <= longestLength) return { label: 'Approaching', cls: 'amber' };
+  return { label: 'Overdue', cls: 'red' };
+}
+
+// =============================================================================
+// SECTION 8 — ENGINE C v2.0 (Trader Decision & Position Management Layer)
+// Pure translation of Engine A + Cycle Intelligence into plain-English
+// trader information. No probability is estimated. No confidence score is
+// computed. No position-health or trend score is produced. Every design
+// choice below reflects a specific finding from the walk-forward research
+// program, not a stylistic preference — see the "How This Works" tab.
+// =============================================================================
+
+// Question 3 — Good Entry / Wait / Avoid. Reuses Engine A's OWN existing
+// Recommended_Allocation output and its own existing 50%-relative-rank tier
+// (already present in getDynamicAllocation's tiering) — no new threshold or
+// decision rule is introduced here.
+function entryVerdict(recommendedAllocation, relativeRankPct) {
+  if (recommendedAllocation === 'STAND DOWN' || relativeRankPct === null) {
+    return { label: 'Avoid', cls: 'avoid', note: "Engine A's own allocation logic recommends standing down today." };
+  }
+  if (relativeRankPct >= 0.50) return { label: 'Good Entry', cls: 'good', note: "Today's setup ranks at or above the 50th percentile of its historical regime range." };
+  return { label: 'Wait', cls: 'wait', note: "Today's setup clears Engine A's stand-down floor but ranks below its 50th percentile." };
+}
+
+// Question 2 — historical support. Reads Engine A's own already-computed
+// conditional-outcome table for the (regime, stage) cohort — a count and a
+// rate that Engine A already tracks internally for its own pillar weighting;
+// this simply surfaces it, it does not compute anything new.
+function historicalSupport(analyticsStats, regimeState, stage) {
+  const outcomes = ((analyticsStats.conditionalStage[regimeState] || {})[stage] || { outcomes: [] }).outcomes;
+  const n = outcomes.length;
+  const blasts = outcomes.filter(o => o.hit === 1).length;
+  return { n, blastRatePct: n ? +(blasts / n * 100).toFixed(1) : null };
+}
+
+// =============================================================================
+// SECTION 9 — UI WIRING
+// =============================================================================
+let _rawRows = null, _fs = null, _aResult = null, _ciResult = null, _historicalCycles = null;
+
+function simpleCsvParse(text) {
+  const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+  const header = lines[0].split(',').map(h => h.trim());
+  const out = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(','); const obj = {};
+    header.forEach((h, idx) => obj[h] = cols[idx]);
+    out.push(obj);
+  }
+  return out;
+}
+
+// ---- shared pipeline runner, used by both auto-fetch and manual upload ----
+function runPipeline(rawRows, sourceLabel) {
+  const statusEl = document.getElementById('loadStatus'), errEl = document.getElementById('loadErr');
+  errEl.textContent = '';
+  try {
+    _rawRows = rawRows;
+    statusEl.textContent = 'Building Feature Store...';
+    _fs = buildFeatureStore(_rawRows);
+    statusEl.textContent += ` ${_fs.rows.length} clean rows. Running Engine A...`;
+    _aResult = runEngineA(_fs.rows);
+    statusEl.textContent += ` ${_aResult.processed.length} rows scored. Building Cycle Intelligence...`;
+    _historicalCycles = detectHistoricalCycles(_fs.rows, 2);
+    _ciResult = buildCycleIntelligence(_fs.rows, _aResult.processed, _historicalCycles);
+    statusEl.textContent = `Done. Clean rows: ${_fs.rows.length} | Engine A rows: ${_aResult.processed.length} | Historical cycles: ${_historicalCycles.length}`;
+    document.getElementById('results').style.display = 'block';
+    document.getElementById('sourceIndicator').textContent = '🟢 Data Source: ' + sourceLabel;
+    renderAll();
+  } catch (err) {
+    errEl.textContent = 'Error: ' + err.message;
+    document.getElementById('sourceIndicator').textContent = '🔴 Data Source: ' + sourceLabel + ' (error)';
+    console.error(err);
+  }
+}
+
+// ---- auto-fetch: same source URL and multi-route fallback as the prior version ----
+const DEFAULT_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0WRRoaKlcjrQ6xthFpq5r5n8XQpUSeUg7rsy0zXBUdx46HBacISyimAsIRbGPRYpsvpkUGwLCSJQm/pub?output=csv";
+function fetchWithTimeout(url, opts, ms) { return Promise.race([fetch(url, opts || {}), new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout')), ms))]); }
+
+function autoFetchAndRun() {
+  const statusEl = document.getElementById('loadStatus'), errEl = document.getElementById('loadErr'), refreshBtn = document.getElementById('refreshBtn');
+  errEl.textContent = ''; refreshBtn.disabled = true; refreshBtn.textContent = '⏳ Fetching...';
+  document.getElementById('sourceIndicator').textContent = '⚪ Data Source: Fetching...';
+  const bust = (DEFAULT_SHEET_URL.indexOf('?') !== -1 ? '&' : '?') + '_cb=' + Date.now();
+  const fresh = DEFAULT_SHEET_URL + bust;
+  const routes = [
+    { label: 'Direct', run: () => fetchWithTimeout(fresh, { cache: 'no-store' }, 7000).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }) },
+    { label: 'corsproxy.io', run: () => fetchWithTimeout('https://corsproxy.io/?' + encodeURIComponent(fresh), {}, 7000).then(r => { if (!r.ok) throw new Error(); return r.text(); }) },
+    { label: 'api.codetabs', run: () => fetchWithTimeout('https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(DEFAULT_SHEET_URL), {}, 7000).then(r => { if (!r.ok) throw new Error(); return r.text(); }) },
+    { label: 'allorigins.win', run: () => fetchWithTimeout('https://api.allorigins.win/get?url=' + encodeURIComponent(DEFAULT_SHEET_URL), {}, 8000).then(r => r.json()).then(j => { if (!j.contents) throw new Error(); return j.contents; }) },
+  ];
+  let idx = 0;
+  function tryNext() {
+    if (idx >= routes.length) {
+      refreshBtn.disabled = false; refreshBtn.textContent = '🔄 Refresh';
+      errEl.textContent = 'All fetch routes failed. Use "Load Local CSV" instead.';
+      document.getElementById('sourceIndicator').textContent = '🔴 Data Source: Fetch failed';
+      return;
+    }
+    statusEl.textContent = `Fetching via ${routes[idx].label} (route ${idx + 1}/${routes.length})...`;
+    routes[idx].run().then(text => {
+      if (!text || text.indexOf(',') === -1) throw new Error('Invalid CSV response');
+      refreshBtn.disabled = false; refreshBtn.textContent = '🔄 Refresh';
+      runPipeline(simpleCsvParse(text), 'Google Sheets (Live)');
+    }).catch(() => { idx++; tryNext(); });
+  }
+  tryNext();
+}
+document.getElementById('refreshBtn').addEventListener('click', autoFetchAndRun);
+window.addEventListener('DOMContentLoaded', autoFetchAndRun);
+
+// ---- manual upload: secondary path, hidden until explicitly requested ----
+document.getElementById('showUploadBtn').addEventListener('click', () => {
+  const p = document.getElementById('uploadPanel');
+  p.style.display = p.style.display === 'none' ? 'flex' : 'none';
+});
+document.getElementById('csvFile').addEventListener('change', (e) => {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      _rawRows = simpleCsvParse(ev.target.result);
+      document.getElementById('loadStatus').textContent = `Loaded ${_rawRows.length} raw rows. Click Run.`;
+      document.getElementById('runBtn').disabled = false;
+    } catch (err) {
+      document.getElementById('loadErr').textContent = 'Error: ' + err.message;
+    }
+  };
+  reader.readAsText(file);
+});
+document.getElementById('runBtn').addEventListener('click', () => {
+  if (!_rawRows) return;
+  runPipeline(_rawRows, 'Local Upload');
+});
+
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tabcontent').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+function renderAll() {
+  const lastRow = _aResult.processed[_aResult.processed.length - 1];
+  const verdict = entryVerdict(lastRow.Recommended_Allocation, lastRow.RelativeRankPct);
+  const badge = document.getElementById('verdictBadge');
+  badge.textContent = verdict.label; badge.className = 'verdict-badge ' + verdict.cls;
+  document.getElementById('verdictNote').textContent = verdict.note;
+
+  document.getElementById('factRelRank').textContent = lastRow.Relative_Score_Pct;
+
+  const ts = timingStatus(_ciResult.currentCycleDay, _ciResult.avgCycleLength, _ciResult.longestCycleLength);
+  document.getElementById('factCycleDay').textContent = 'Day ' + _ciResult.currentCycleDay;
+  document.getElementById('factCycleDaySub').textContent = _ciResult.avgCycleLength
+    ? `historically runs ${_ciResult.shortestCycleLength}\u2013${_ciResult.longestCycleLength}d (avg ${_ciResult.avgCycleLength}d)` : 'no completed historical cycles yet';
+  const tsEl = document.getElementById('factTimingStatus');
+  tsEl.innerHTML = `<span class="badge ${ts.cls || 'slate'}">${ts.label}</span>`;
+  document.getElementById('factTimingSub').textContent = ts.note || 'compares today\u2019s cycle day to historical cycle lengths';
+
+  const support = historicalSupport(_aResult.analyticsStats, lastRow.RegimeState, lastRow.Stage);
+  document.getElementById('factSimilarN').textContent = support.n;
+  document.getElementById('factHistBlastRate').textContent = support.blastRatePct !== null ? support.blastRatePct + '%' : '—';
+  document.getElementById('factRegime').textContent = lastRow.RegimeState;
+
+  // Open position tab
+  const entry = _ciResult.entryRow;
+  document.getElementById('posEntryDate').textContent = _ciResult.entryDate;
+  document.getElementById('posEntryRegime').textContent = entry ? entry.RegimeState : '—';
+  document.getElementById('posEntryStage').textContent = entry ? ('Stage ' + entry.Stage) : '—';
+  document.getElementById('posEntryZone').textContent = entry ? entry.Zone : '—';
+  document.getElementById('posEntryRank').textContent = entry ? entry.Relative_Score_Pct : '—';
+  document.getElementById('posCycleDay').textContent = 'Day ' + _ciResult.currentCycleDay;
+  document.getElementById('posTimingStatus').innerHTML = `<span class="badge ${ts.cls || 'slate'}">${ts.label}</span>`;
+  document.getElementById('posAvgLength').textContent = _ciResult.avgCycleLength ? _ciResult.avgCycleLength + ' days' : '—';
+}
+</script>
+</body>
+</html>
