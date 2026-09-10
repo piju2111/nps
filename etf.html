@@ -114,7 +114,7 @@
     }
     .ab-score {
       font-weight: 700;
-      color: #2f855a;
+      color: #2b6cb0;
     }
     .footer {
       text-align: center;
@@ -139,14 +139,14 @@
     <div id="top-price" class="price">—</div>
 
     <!-- Tap to Listen Button -->
-    <button id="speak-btn" class="speaker-btn" onclick="speakCurrentPick()">
-      🔊 <span>Listen to Signal</span>
+    <button id="speak-btn" class="speaker-btn" onclick="speakAllTop5()">
+      🔊 <span>Listen to Top 5</span>
     </button>
   </div>
 
   <!-- Top 5 Ranked Candidates List -->
   <div class="card">
-    <div class="table-title">Eligible ETFs Ranked by AB Momentum</div>
+    <div class="table-title">Eligible ETFs Ranked by AB Momentum (Ascending)</div>
     <table>
       <thead>
         <tr>
@@ -165,14 +165,14 @@
   </div>
 
   <div class="footer">
-    Rule Filter: SMA20 Turnover > ₹1.00 Cr | Rank: Composite AB% Descending
+    Rule Filter: SMA20 Turnover > ₹1.00 Cr | Rank: Composite AB% Ascending
   </div>
 </div>
 
 <script>
   const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRjjLROfZH15-ATOxhyE_LiprAfFl7yOxzPbfyryhdOhaQ6vEpJ-Q5b5DljHr3B0Ags8PxC8BYjC-fh/pub?gid=2034581734&single=true&output=csv";
 
-  let currentAnnouncement = "Scanning is in progress. Please wait.";
+  let voiceAnnouncementText = "Scanning is in progress. Please wait.";
 
   function cleanNumber(val) {
     if (!val) return 0;
@@ -191,7 +191,7 @@
         },
         error: function(err) {
           document.getElementById("top-ticker").innerText = "Error Loading";
-          currentAnnouncement = "Error loading latest market data.";
+          voiceAnnouncementText = "Error loading latest market data.";
           console.error(err);
         }
       });
@@ -210,7 +210,7 @@
       const sma20TO = cleanNumber(row["SMA20 Turnover (₹ Cr)"]);
       const abScore = cleanNumber(row["Composite AB (%)"]);
 
-      // Rule: SMA20 Turnover >= ₹1.00 Cr AND AB > 0%
+      // Rule: SMA20 Turnover >= ₹1.00 Cr AND Positive Momentum (AB > 0%)
       if (symbol && sma20TO >= 1.00 && abScore > 0) {
         qualified.push({
           symbol,
@@ -222,8 +222,8 @@
       }
     });
 
-    // Pure AB Momentum ranking: highest AB Score descending
-    qualified.sort((a, b) => b.abScore - a.abScore);
+    // Ascending sort: lowest positive AB score first
+    qualified.sort((a, b) => a.abScore - b.abScore);
 
     displayResults(qualified);
   }
@@ -234,7 +234,7 @@
       document.getElementById("top-category").innerText = "No ETF cleared Turnover (> ₹1Cr) & Positive AB today.";
       document.getElementById("top-price").innerText = "";
       document.getElementById("ranked-list").innerHTML = "<tr><td colspan='4' style='text-align: center;'>No qualified ETFs found.</td></tr>";
-      currentAnnouncement = "Today there is no buy signal. No ETF qualified under turnover and momentum rules.";
+      voiceAnnouncementText = "Today there is no buy signal. No ETF qualified under portfolio rules.";
       return;
     }
 
@@ -243,10 +243,19 @@
     document.getElementById("top-category").innerText = top.category;
     document.getElementById("top-price").innerText = "Current Market Price: ₹" + top.ltp.toFixed(2);
 
-    currentAnnouncement = `Today's number one buy recommendation is ${top.symbol} in ${top.category}. Current market price is ${Math.round(top.ltp)} rupees.`;
+    // Build the 5-item audio script
+    const top5 = list.slice(0, 5);
+    let speechParts = [`Today's top buy signal is ${top.symbol} at ${Math.round(top.ltp)} rupees. Here are all top ranked ETFs. `];
 
+    top5.forEach((item, index) => {
+      speechParts.push(`Number ${index + 1}, ${item.symbol}, in ${item.category}, price ${Math.round(item.ltp)} rupees. `);
+    });
+
+    voiceAnnouncementText = speechParts.join(" ");
+
+    // Render table
     let tableHtml = "";
-    list.slice(0, 5).forEach((item, index) => {
+    top5.forEach((item, index) => {
       tableHtml += `
         <tr>
           <td><strong>#${index + 1}</strong></td>
@@ -260,16 +269,20 @@
     document.getElementById("ranked-list").innerHTML = tableHtml;
   }
 
-  function speakCurrentPick() {
+  // Voice Functionality: Speaks the entire top 5 list
+  function speakAllTop5() {
     if (!('speechSynthesis' in window)) {
       alert("Text-to-speech is not supported by your browser.");
       return;
     }
+
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(currentAnnouncement);
+
+    const utterance = new SpeechSynthesisUtterance(voiceAnnouncementText);
     utterance.lang = 'en-IN';
-    utterance.rate = 0.9;
+    utterance.rate = 0.88; // Slightly slower, clear cadence for seniors
     utterance.pitch = 1.0;
+
     window.speechSynthesis.speak(utterance);
   }
 
