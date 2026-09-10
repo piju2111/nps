@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Today's ETF Recommendation</title>
+  <!-- PapaParse for clean CSV parsing in browser -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #f4f6f9;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .container {
+      max-width: 600px;
+      width: 100%;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .header h1 {
+      font-size: 26px;
+      color: #1a202c;
+      margin: 0;
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      margin-bottom: 20px;
+    }
+    .highlight-card {
+      border: 3px solid #2b6cb0;
+      background: #ebf8ff;
+      text-align: center;
+    }
+    .badge {
+      display: inline-block;
+      padding: 6px 14px;
+      font-size: 14px;
+      font-weight: 700;
+      border-radius: 20px;
+      background: #3182ce;
+      color: white;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .ticker {
+      font-size: 40px;
+      font-weight: 800;
+      color: #2b6cb0;
+      margin: 10px 0;
+    }
+    .details {
+      font-size: 18px;
+      color: #4a5568;
+      margin-bottom: 8px;
+    }
+    .price {
+      font-size: 22px;
+      font-weight: 700;
+      color: #2d3748;
+    }
+    .table-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: #2d3748;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 12px 10px;
+      text-align: left;
+      font-size: 15px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    th {
+      color: #718096;
+      font-size: 13px;
+      text-transform: uppercase;
+    }
+    .zone-a {
+      font-weight: 700;
+      color: #2b6cb0;
+    }
+    .zone-b {
+      font-weight: 600;
+      color: #2f855a;
+    }
+    .footer {
+      text-align: center;
+      font-size: 12px;
+      color: #a0aec0;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>Today's ETF Buying Signal</h1>
+  </div>
+
+  <!-- Primary Recommendation Card -->
+  <div id="top-pick-card" class="card highlight-card">
+    <div class="badge">#1 Ranked Buy Today</div>
+    <div id="top-ticker" class="ticker">Scanning...</div>
+    <div id="top-category" class="details">—</div>
+    <div id="top-price" class="price">—</div>
+  </div>
+
+  <!-- Top 5 Ranked Candidates List -->
+  <div class="card">
+    <div class="table-title">Eligible ETFs Ranked by AB Momentum</div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>ETF Ticker</th>
+          <th>Price</th>
+          <th>AB Score</th>
+          <th>Zone</th>
+        </tr>
+      </thead>
+      <tbody id="ranked-list">
+        <tr>
+          <td colspan="5" style="text-align: center;">Loading latest sheet data...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    Rule Filter: SMA20 Turnover > ₹1.00 Cr | Rank: Zone A > Zone B by Composite AB%
+  </div>
+</div>
+
+<script>
+  const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRjjLROfZH15-ATOxhyE_LiprAfFl7yOxzPbfyryhdOhaQ6vEpJ-Q5b5DljHr3B0Ags8PxC8BYjC-fh/pub?gid=2034581734&single=true&output=csv";
+
+  function cleanNumber(val) {
+    if (!val) return 0;
+    // Cleans out commas, %, and currency symbols
+    const num = parseFloat(val.toString().replace(/[₹,% ]/g, ""));
+    return isNaN(num) ? 0 : num;
+  }
+
+  async function loadETFData() {
+    try {
+      Papa.parse(SHEET_CSV_URL, {
+        download: true,
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          processSheetRows(results.data);
+        },
+        error: function(err) {
+          document.getElementById("top-ticker").innerText = "Error Loading";
+          console.error(err);
+        }
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  function processSheetRows(rows) {
+    const qualified = [];
+
+    rows.forEach(row => {
+      const symbol = (row["Symbol"] || "").trim();
+      const category = (row["Category / Bucket"] || "").trim();
+      const ltp = cleanNumber(row["Live Price (LTP)"]);
+      const sma20TO = cleanNumber(row["SMA20 Turnover (₹ Cr)"]);
+      const abScore = cleanNumber(row["Composite AB (%)"]);
+      const zone = (row["Momentum Zone"] || "").trim();
+
+      // Rule: SMA20 Turnover >= ₹1.00 Cr AND Positive Momentum (AB > 0%)
+      if (symbol && sma20TO >= 1.00 && abScore > 0) {
+        qualified.push({
+          symbol,
+          category,
+          ltp,
+          sma20TO,
+          abScore,
+          zone,
+          // Zone A ranks ahead of Zone B
+          isZoneA: zone.includes("Zone A") ? 1 : 0
+        });
+      }
+    });
+
+    // Rank: Zone A first, then highest AB Score descending
+    qualified.sort((a, b) => {
+      if (b.isZoneA !== a.isZoneA) {
+        return b.isZoneA - a.isZoneA;
+      }
+      return b.abScore - a.abScore;
+    });
+
+    displayResults(qualified);
+  }
+
+  function displayResults(list) {
+    if (list.length === 0) {
+      document.getElementById("top-ticker").innerText = "NO BUY SIGNAL";
+      document.getElementById("top-category").innerText = "No ETF cleared Turnover (> ₹1Cr) & Positive AB today.";
+      document.getElementById("top-price").innerText = "";
+      document.getElementById("ranked-list").innerHTML = "<tr><td colspan='5' style='text-align: center;'>No qualified ETFs found.</td></tr>";
+      return;
+    }
+
+    // #1 Recommendation Card
+    const top = list[0];
+    document.getElementById("top-ticker").innerText = top.symbol;
+    document.getElementById("top-category").innerText = top.category + " (" + top.zone + ")";
+    document.getElementById("top-price").innerText = "Current Market Price: ₹" + top.ltp.toFixed(2);
+
+    // Top 5 Candidates
+    let tableHtml = "";
+    list.slice(0, 5).forEach((item, index) => {
+      const zoneClass = item.isZoneA ? "zone-a" : "zone-b";
+      tableHtml += `
+        <tr>
+          <td><strong>#${index + 1}</strong></td>
+          <td><strong>${item.symbol}</strong></td>
+          <td>₹${item.ltp.toFixed(2)}</td>
+          <td>+${item.abScore.toFixed(2)}%</td>
+          <td class="${zoneClass}">${item.zone}</td>
+        </tr>
+      `;
+    });
+
+    document.getElementById("ranked-list").innerHTML = tableHtml;
+  }
+
+  // Initial load
+  loadETFData();
+
+  // Auto-refresh every 5 minutes during market hours
+  setInterval(loadETFData, 5 * 60 * 1000);
+</script>
+
+</body>
+</html>
