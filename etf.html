@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Today's ETF Recommendation</title>
-  <!-- PapaParse for clean CSV parsing in browser -->
+  <!-- PapaParse for CSV parsing -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <style>
     body {
@@ -40,6 +40,7 @@
       border: 3px solid #2b6cb0;
       background: #ebf8ff;
       text-align: center;
+      position: relative;
     }
     .badge {
       display: inline-block;
@@ -53,7 +54,7 @@
       letter-spacing: 0.5px;
     }
     .ticker {
-      font-size: 40px;
+      font-size: 42px;
       font-weight: 800;
       color: #2b6cb0;
       margin: 10px 0;
@@ -67,6 +68,28 @@
       font-size: 22px;
       font-weight: 700;
       color: #2d3748;
+      margin-bottom: 14px;
+    }
+    .speaker-btn {
+      background: #2b6cb0;
+      color: white;
+      border: none;
+      border-radius: 50px;
+      padding: 12px 24px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 2px 6px rgba(43, 108, 176, 0.3);
+      transition: transform 0.1s, background 0.2s;
+    }
+    .speaker-btn:hover {
+      background: #2c5282;
+    }
+    .speaker-btn:active {
+      transform: scale(0.96);
     }
     .table-title {
       font-size: 18px;
@@ -89,12 +112,8 @@
       font-size: 13px;
       text-transform: uppercase;
     }
-    .zone-a {
+    .ab-score {
       font-weight: 700;
-      color: #2b6cb0;
-    }
-    .zone-b {
-      font-weight: 600;
       color: #2f855a;
     }
     .footer {
@@ -118,6 +137,11 @@
     <div id="top-ticker" class="ticker">Scanning...</div>
     <div id="top-category" class="details">—</div>
     <div id="top-price" class="price">—</div>
+
+    <!-- Tap to Listen Button -->
+    <button id="speak-btn" class="speaker-btn" onclick="speakCurrentPick()">
+      🔊 <span>Listen to Signal</span>
+    </button>
   </div>
 
   <!-- Top 5 Ranked Candidates List -->
@@ -130,28 +154,28 @@
           <th>ETF Ticker</th>
           <th>Price</th>
           <th>AB Score</th>
-          <th>Zone</th>
         </tr>
       </thead>
       <tbody id="ranked-list">
         <tr>
-          <td colspan="5" style="text-align: center;">Loading latest sheet data...</td>
+          <td colspan="4" style="text-align: center;">Loading latest sheet data...</td>
         </tr>
       </tbody>
     </table>
   </div>
 
   <div class="footer">
-    Rule Filter: SMA20 Turnover > ₹1.00 Cr | Rank: Zone A > Zone B by Composite AB%
+    Rule Filter: SMA20 Turnover > ₹1.00 Cr | Rank: Composite AB% Descending
   </div>
 </div>
 
 <script>
   const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRjjLROfZH15-ATOxhyE_LiprAfFl7yOxzPbfyryhdOhaQ6vEpJ-Q5b5DljHr3B0Ags8PxC8BYjC-fh/pub?gid=2034581734&single=true&output=csv";
 
+  let currentAnnouncement = "Scanning is in progress. Please wait.";
+
   function cleanNumber(val) {
     if (!val) return 0;
-    // Cleans out commas, %, and currency symbols
     const num = parseFloat(val.toString().replace(/[₹,% ]/g, ""));
     return isNaN(num) ? 0 : num;
   }
@@ -167,6 +191,7 @@
         },
         error: function(err) {
           document.getElementById("top-ticker").innerText = "Error Loading";
+          currentAnnouncement = "Error loading latest market data.";
           console.error(err);
         }
       });
@@ -184,30 +209,21 @@
       const ltp = cleanNumber(row["Live Price (LTP)"]);
       const sma20TO = cleanNumber(row["SMA20 Turnover (₹ Cr)"]);
       const abScore = cleanNumber(row["Composite AB (%)"]);
-      const zone = (row["Momentum Zone"] || "").trim();
 
-      // Rule: SMA20 Turnover >= ₹1.00 Cr AND Positive Momentum (AB > 0%)
+      // Rule: SMA20 Turnover >= ₹1.00 Cr AND AB > 0%
       if (symbol && sma20TO >= 1.00 && abScore > 0) {
         qualified.push({
           symbol,
           category,
           ltp,
           sma20TO,
-          abScore,
-          zone,
-          // Zone A ranks ahead of Zone B
-          isZoneA: zone.includes("Zone A") ? 1 : 0
+          abScore
         });
       }
     });
 
-    // Rank: Zone A first, then highest AB Score descending
-    qualified.sort((a, b) => {
-      if (b.isZoneA !== a.isZoneA) {
-        return b.isZoneA - a.isZoneA;
-      }
-      return b.abScore - a.abScore;
-    });
+    // Pure AB Momentum ranking: highest AB Score descending
+    qualified.sort((a, b) => b.abScore - a.abScore);
 
     displayResults(qualified);
   }
@@ -217,27 +233,26 @@
       document.getElementById("top-ticker").innerText = "NO BUY SIGNAL";
       document.getElementById("top-category").innerText = "No ETF cleared Turnover (> ₹1Cr) & Positive AB today.";
       document.getElementById("top-price").innerText = "";
-      document.getElementById("ranked-list").innerHTML = "<tr><td colspan='5' style='text-align: center;'>No qualified ETFs found.</td></tr>";
+      document.getElementById("ranked-list").innerHTML = "<tr><td colspan='4' style='text-align: center;'>No qualified ETFs found.</td></tr>";
+      currentAnnouncement = "Today there is no buy signal. No ETF qualified under turnover and momentum rules.";
       return;
     }
 
-    // #1 Recommendation Card
     const top = list[0];
     document.getElementById("top-ticker").innerText = top.symbol;
-    document.getElementById("top-category").innerText = top.category + " (" + top.zone + ")";
+    document.getElementById("top-category").innerText = top.category;
     document.getElementById("top-price").innerText = "Current Market Price: ₹" + top.ltp.toFixed(2);
 
-    // Top 5 Candidates
+    currentAnnouncement = `Today's number one buy recommendation is ${top.symbol} in ${top.category}. Current market price is ${Math.round(top.ltp)} rupees.`;
+
     let tableHtml = "";
     list.slice(0, 5).forEach((item, index) => {
-      const zoneClass = item.isZoneA ? "zone-a" : "zone-b";
       tableHtml += `
         <tr>
           <td><strong>#${index + 1}</strong></td>
           <td><strong>${item.symbol}</strong></td>
           <td>₹${item.ltp.toFixed(2)}</td>
-          <td>+${item.abScore.toFixed(2)}%</td>
-          <td class="${zoneClass}">${item.zone}</td>
+          <td class="ab-score">+${item.abScore.toFixed(2)}%</td>
         </tr>
       `;
     });
@@ -245,10 +260,20 @@
     document.getElementById("ranked-list").innerHTML = tableHtml;
   }
 
-  // Initial load
-  loadETFData();
+  function speakCurrentPick() {
+    if (!('speechSynthesis' in window)) {
+      alert("Text-to-speech is not supported by your browser.");
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(currentAnnouncement);
+    utterance.lang = 'en-IN';
+    utterance.rate = 0.9;
+    utterance.pitch = 1.0;
+    window.speechSynthesis.speak(utterance);
+  }
 
-  // Auto-refresh every 5 minutes during market hours
+  loadETFData();
   setInterval(loadETFData, 5 * 60 * 1000);
 </script>
 
