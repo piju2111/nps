@@ -17,7 +17,7 @@
       align-items: center;
     }
     .container {
-      max-width: 600px;
+      max-width: 650px;
       width: 100%;
     }
     .header {
@@ -116,6 +116,10 @@
       font-weight: 700;
       color: #2b6cb0;
     }
+    .surge-badge {
+      font-weight: 700;
+      color: #2f855a;
+    }
     .footer {
       text-align: center;
       font-size: 12px;
@@ -146,7 +150,7 @@
 
   <!-- Top 5 Ranked Candidates List -->
   <div class="card">
-    <div class="table-title">Eligible ETFs Ranked by AB Momentum (Ascending)</div>
+    <div class="table-title">Eligible ETFs (Surge > 1.0 & AB Ascending)</div>
     <table>
       <thead>
         <tr>
@@ -154,18 +158,19 @@
           <th>ETF Ticker</th>
           <th>Price</th>
           <th>AB Score</th>
+          <th>Surge</th>
         </tr>
       </thead>
       <tbody id="ranked-list">
         <tr>
-          <td colspan="4" style="text-align: center;">Loading latest sheet data...</td>
+          <td colspan="5" style="text-align: center;">Loading latest sheet data...</td>
         </tr>
       </tbody>
     </table>
   </div>
 
   <div class="footer">
-    Rule Filter: SMA20 Turnover > ₹1.00 Cr | Rank: Composite AB% Ascending
+    Rules: SMA20 TO > ₹1.00 Cr | Turnover Surge > 1.0 | AB% Ascending
   </div>
 </div>
 
@@ -209,15 +214,22 @@
       const ltp = cleanNumber(row["Live Price (LTP)"]);
       const sma20TO = cleanNumber(row["SMA20 Turnover (₹ Cr)"]);
       const abScore = cleanNumber(row["Composite AB (%)"]);
+      
+      // Reads "Turnover Surge" or fallback "Surge formula"
+      const surge = cleanNumber(row["Turnover Surge"] || row["Surge formula"]);
 
-      // Rule: SMA20 Turnover >= ₹1.00 Cr AND Positive Momentum (AB > 0%)
-      if (symbol && sma20TO >= 1.00 && abScore > 0) {
+      // STRICT FILTERS:
+      // 1. SMA20 Turnover >= ₹1.00 Cr (Institutional Liquidity)
+      // 2. Composite AB > 0% (Positive Trend / Zone A or B)
+      // 3. Turnover Surge > 1.0 (SMA10 > SMA20 Accumulation)
+      if (symbol && sma20TO >= 1.00 && abScore > 0 && surge > 1.00) {
         qualified.push({
           symbol,
           category,
           ltp,
           sma20TO,
-          abScore
+          abScore,
+          surge
         });
       }
     });
@@ -231,24 +243,24 @@
   function displayResults(list) {
     if (list.length === 0) {
       document.getElementById("top-ticker").innerText = "NO BUY SIGNAL";
-      document.getElementById("top-category").innerText = "No ETF cleared Turnover (> ₹1Cr) & Positive AB today.";
+      document.getElementById("top-category").innerText = "No ETF cleared Turnover (> ₹1Cr), Positive AB, and Surge (> 1.0) today.";
       document.getElementById("top-price").innerText = "";
-      document.getElementById("ranked-list").innerHTML = "<tr><td colspan='4' style='text-align: center;'>No qualified ETFs found.</td></tr>";
-      voiceAnnouncementText = "Today there is no buy signal. No ETF qualified under portfolio rules.";
+      document.getElementById("ranked-list").innerHTML = "<tr><td colspan='5' style='text-align: center;'>No qualified ETFs found today.</td></tr>";
+      voiceAnnouncementText = "Today there is no buy signal. No ETF qualified under liquidity, momentum, and surge rules.";
       return;
     }
 
     const top = list[0];
     document.getElementById("top-ticker").innerText = top.symbol;
-    document.getElementById("top-category").innerText = top.category;
-    document.getElementById("top-price").innerText = "Current Market Price: ₹" + top.ltp.toFixed(2);
+    document.getElementById("top-category").innerText = `${top.category} (Surge: ${top.surge.toFixed(2)}x)`;
+    document.getElementById("top-price").innerText = `Current Market Price: ₹${top.ltp.toFixed(2)}`;
 
-    // Build the 5-item audio script
+    // Build the audio script
     const top5 = list.slice(0, 5);
-    let speechParts = [`Today's top buy signal is ${top.symbol} at ${Math.round(top.ltp)} rupees. Here are all top ranked ETFs. `];
+    let speechParts = [`Today's top buy recommendation is ${top.symbol} in ${top.category} at ${Math.round(top.ltp)} rupees, with a volume surge of ${top.surge.toFixed(2)}. Here are all qualified ETFs. `];
 
     top5.forEach((item, index) => {
-      speechParts.push(`Number ${index + 1}, ${item.symbol}, in ${item.category}, price ${Math.round(item.ltp)} rupees. `);
+      speechParts.push(`Number ${index + 1}, ${item.symbol}, price ${Math.round(item.ltp)} rupees, surge ${item.surge.toFixed(2)}. `);
     });
 
     voiceAnnouncementText = speechParts.join(" ");
@@ -262,6 +274,7 @@
           <td><strong>${item.symbol}</strong></td>
           <td>₹${item.ltp.toFixed(2)}</td>
           <td class="ab-score">+${item.abScore.toFixed(2)}%</td>
+          <td class="surge-badge">${item.surge.toFixed(2)}x</td>
         </tr>
       `;
     });
@@ -269,7 +282,6 @@
     document.getElementById("ranked-list").innerHTML = tableHtml;
   }
 
-  // Voice Functionality: Speaks the entire top 5 list
   function speakAllTop5() {
     if (!('speechSynthesis' in window)) {
       alert("Text-to-speech is not supported by your browser.");
@@ -280,7 +292,7 @@
 
     const utterance = new SpeechSynthesisUtterance(voiceAnnouncementText);
     utterance.lang = 'en-IN';
-    utterance.rate = 0.88; // Slightly slower, clear cadence for seniors
+    utterance.rate = 0.88;
     utterance.pitch = 1.0;
 
     window.speechSynthesis.speak(utterance);
