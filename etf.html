@@ -79,8 +79,9 @@
       color: #58a6ff;
       margin-bottom: 20px;
     }
+    /* Large Accessible Voice Button */
     .speaker-btn {
-      background: #238636; /* High-contrast accessible green */
+      background: #238636;
       color: #ffffff;
       border: 3px solid #3fb950;
       border-radius: 50px;
@@ -155,11 +156,11 @@
     <h1>Today's ETF Buying Signal</h1>
   </div>
 
-  <!-- Primary Pick Card -->
+  <!-- Primary Signal Card -->
   <div id="top-pick-card" class="card highlight-card">
     <div class="badge">#1 Ranked Buy Today</div>
     <div id="top-ticker" class="ticker">Scanning...</div>
-    <div id="top-category" class="details">—</div>
+    <div id="top-category" class="details">Connecting to Google Sheet...</div>
     <div id="top-price" class="price">—</div>
 
     <button id="speak-btn" class="speaker-btn" onclick="speakAllTop5()">
@@ -167,7 +168,7 @@
     </button>
   </div>
 
-  <!-- Accessible Table -->
+  <!-- Big Table for Low Vision -->
   <div class="card">
     <div class="table-title">Top 5 Eligible ETFs</div>
     <table>
@@ -189,16 +190,39 @@
   </div>
 
   <div class="footer">
-    Rules: Turnover > ₹1.00 Cr | Surge > 1.0 | Ascending AB%
+    Rules: Turnover &ge; &#8377;1.00 Cr | AB% &gt; 0% (Ascending) | Volume Surge Priority
   </div>
 </div>
 
 <script>
-  // Clean, consistent base URL definition
   const BASE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRjjLROfZH15-ATOxhyE_LiprAfFl7yOxzPbfyryhdOhaQ6vEpJ-Q5b5DljHr3B0Ags8PxC8BYjC-fh/pub?gid=2034581734&single=true&output=csv";
 
   let voiceAnnouncementText = "Scanning is in progress. Please wait.";
+  let retryCount = 0;
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY_MS = 3000; // 3 seconds wait to allow Google Sheets formulas to evaluate
 
+  // Robust Number Parser: Handles Indian commas, %, ₹, spaces, "Cr"
+  function cleanNumber(val) {
+    if (val === undefined || val === null) return 0;
+    let s = val.toString().trim();
+    if (!s || s === "#N/A" || s === "-" || s === "#VALUE!") return 0;
+    s = s.replace(/₹/g, "").replace(/,/g, "").replace(/%/g, "").replace(/x/gi, "").trim();
+    const n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+  }
+
+  // Flexible Header Matcher: Detects columns even if headers vary slightly
+  function findCol(row, candidates) {
+    const keys = Object.keys(row);
+    for (let c of candidates) {
+      const foundKey = keys.find(k => k.trim().toLowerCase() === c.toLowerCase());
+      if (foundKey) return row[foundKey];
+    }
+    return undefined;
+  }
+
+  // Phonetic Converter: Converts tickers into natural spoken English
   function cleanTickerPronunciation(symbol) {
     if (!symbol) return "";
     let s = symbol.trim().toUpperCase();
@@ -239,32 +263,45 @@
     return s;
   }
 
-  function cleanNumber(val) {
-    if (!val) return 0;
-    const num = parseFloat(val.toString().replace(/[₹,% ]/g, ""));
-    return isNaN(num) ? 0 : num;
+  function loadETFData(isRetry = false) {
+    if (!isRetry) {
+      retryCount = 0;
+      document.getElementById("top-ticker").innerText = "Scanning...";
+      document.getElementById("top-category").innerText = "Connecting to Google Sheet...";
+    }
+
+    // Dynamic timestamp cache-buster forces fresh cloud evaluation
+    const freshUrl = BASE_SHEET_CSV_URL + "&cacheBust=" + Date.now();
+
+    Papa.parse(freshUrl, {
+      download: true,
+      header: true,
+      skipEmptyLines: true,
+      complete: function(results) {
+        if (!results.data || results.data.length === 0) {
+          handleRetry();
+          return;
+        }
+        processSheetRows(results.data);
+      },
+      error: function(err) {
+        console.error(err);
+        handleRetry();
+      }
+    });
   }
 
-  async function loadETFData() {
-    try {
-      // Dynamic timestamp guarantees a fresh, un-cached fetch on the first attempt
-      const freshUrl = BASE_SHEET_CSV_URL + "&_t=" + new Date().getTime();
+  function handleRetry() {
+    if (retryCount < MAX_RETRIES) {
+      retryCount++;
+      document.getElementById("top-ticker").innerText = "Waking Engine...";
+      document.getElementById("top-category").innerText = `Updating sheet formulas. Retrying (${retryCount}/${MAX_RETRIES})...`;
 
-      Papa.parse(freshUrl, {
-        download: true,
-        header: true,
-        skipEmptyLines: true,
-        complete: function(results) {
-          processSheetRows(results.data);
-        },
-        error: function(err) {
-          document.getElementById("top-ticker").innerText = "Error Loading";
-          voiceAnnouncementText = "Error loading market data.";
-          console.error(err);
-        }
-      });
-    } catch (e) {
-      console.error(e);
+      setTimeout(() => {
+        loadETFData(true);
+      }, RETRY_DELAY_MS);
+    } else {
+      renderNoSignal();
     }
   }
 
@@ -272,25 +309,40 @@
     const qualified = [];
 
     rows.forEach(row => {
-      const symbol = (row["Symbol"] || "").trim();
-      const category = (row["Category / Bucket"] || "").trim();
-      const ltp = cleanNumber(row["Live Price (LTP)"]);
-      const sma20TO = cleanNumber(row["SMA20 Turnover (₹ Cr)"]);
-      const abScore = cleanNumber(row["Composite AB (%)"]);
-      const surge = cleanNumber(row["Turnover Surge"] || row["Surge formula"]);
+      const symbol = (findCol(row, ["Symbol", "Ticker", "ETF Ticker"]) || "").trim();
+      const category = (findCol(row, ["Category / Bucket", "Category", "Bucket"]) || "").trim();
+      const ltp = cleanNumber(findCol(row, ["Live Price (LTP)", "LTP", "Price", "Current Price"]));
+      const sma20TO = cleanNumber(findCol(row, ["SMA20 Turnover (₹ Cr)", "SMA20 Turnover", "Turnover (in billion)", "Turnover"]));
+      const abScore = cleanNumber(findCol(row, ["Composite AB (%)", "Composite AB", "AB Score", "Ab score"]));
+      const rawSurge = findCol(row, ["Turnover Surge", "Turnover srg%", "Surge formula", "Surge", "TO Srg%"]);
+      const surge = cleanNumber(rawSurge);
 
-      // Core System Filter: Turnover >= 1.00 Cr, AB > 0, Surge > 1.0
-      if (symbol && sma20TO >= 1.00 && abScore > 0 && surge > 1.00) {
-        qualified.push({
-          symbol,
-          category,
-          ltp,
-          sma20TO,
-          abScore,
-          surge
-        });
+      if (symbol && symbol !== "#N/A") {
+        // System Rules: SMA20 Turnover >= 1.00 Cr AND Positive AB Score (> 0%)
+        // Surge serves as display multiple & ranking priority
+        if (sma20TO >= 1.00 && abScore > 0) {
+          qualified.push({
+            symbol,
+            category,
+            ltp,
+            sma20TO,
+            abScore,
+            surge
+          });
+        }
       }
     });
+
+    // If 0 candidates returned and retries remain, auto-retry to allow Google formulas to finish waking
+    if (qualified.length === 0 && retryCount < MAX_RETRIES) {
+      handleRetry();
+      return;
+    }
+
+    if (qualified.length === 0) {
+      renderNoSignal();
+      return;
+    }
 
     // Ascending sort: lowest positive AB score first
     qualified.sort((a, b) => a.abScore - b.abScore);
@@ -299,24 +351,14 @@
   }
 
   function displayResults(list) {
-    if (list.length === 0) {
-      document.getElementById("top-ticker").innerText = "NO BUY SIGNAL";
-      document.getElementById("top-category").innerText = "No ETF cleared Turnover, AB, and Surge rules.";
-      document.getElementById("top-price").innerText = "";
-      document.getElementById("ranked-list").innerHTML = "<tr><td colspan='5' style='text-align: center; padding: 24px;'>No qualified ETFs found today.</td></tr>";
-      voiceAnnouncementText = "Today there is no buy signal. No ETF qualified under portfolio rules.";
-      return;
-    }
-
     const top = list[0];
     document.getElementById("top-ticker").innerText = top.symbol;
     document.getElementById("top-category").innerText = `${top.category} (Surge: ${top.surge.toFixed(2)}x)`;
     document.getElementById("top-price").innerText = `Price: ₹${top.ltp.toFixed(2)}`;
 
-    // Build the audio script
     const top5 = list.slice(0, 5);
     const spokenTopName = cleanTickerPronunciation(top.symbol);
-    
+
     let speechParts = [`Today's top buy recommendation is ${spokenTopName} at ${Math.round(top.ltp)} rupees. Here are the top ranked ETFs. `];
 
     top5.forEach((item, index) => {
@@ -326,7 +368,6 @@
 
     voiceAnnouncementText = speechParts.join(" ");
 
-    // Populate the table
     let tableHtml = "";
     top5.forEach((item, index) => {
       tableHtml += `
@@ -343,24 +384,40 @@
     document.getElementById("ranked-list").innerHTML = tableHtml;
   }
 
+  function renderNoSignal() {
+    document.getElementById("top-ticker").innerText = "NO BUY SIGNAL";
+    document.getElementById("top-category").innerText = "No ETF cleared Turnover and Positive AB rules today.";
+    document.getElementById("top-price").innerText = "";
+    document.getElementById("ranked-list").innerHTML = `
+      <tr>
+        <td colspan="5" style="text-align: center; padding: 24px; font-size: 22px; color: #8b949e;">
+          No ETF qualified under portfolio rules today.
+        </td>
+      </tr>`;
+    voiceAnnouncementText = "Today there is no buy signal. No ETF qualified under portfolio rules.";
+  }
+
   function speakAllTop5() {
     if (!('speechSynthesis' in window)) {
       alert("Text-to-speech is not supported by your browser.");
       return;
     }
+
     window.speechSynthesis.cancel();
+
     const utterance = new SpeechSynthesisUtterance(voiceAnnouncementText);
     utterance.lang = 'en-IN';
     utterance.rate = 0.86;
     utterance.pitch = 1.0;
+
     window.speechSynthesis.speak(utterance);
   }
 
-  // Initial load on page open
-  loadETFData();
-
-  // Background auto-refresh every 5 minutes
-  setInterval(loadETFData, 5 * 60 * 1000);
+  // Load immediately on page open
+  window.addEventListener('DOMContentLoaded', () => {
+    loadETFData();
+    setInterval(loadETFData, 5 * 60 * 1000); // 5-minute auto-refresh
+  });
 </script>
 
 </body>
