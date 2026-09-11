@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Today's ETF Recommendation</title>
-  <!-- PapaParse for CSV parsing -->
+  <!-- PapaParse for clean CSV parsing -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <style>
     body {
@@ -142,7 +142,7 @@
     <div id="top-category" class="details">—</div>
     <div id="top-price" class="price">—</div>
 
-    <!-- Tap to Listen Button -->
+    <!-- Tap to Speak Button -->
     <button id="speak-btn" class="speaker-btn" onclick="speakAllTop5()">
       🔊 <span>Listen to Top 5</span>
     </button>
@@ -179,6 +179,51 @@
 
   let voiceAnnouncementText = "Scanning is in progress. Please wait.";
 
+  // Phonetic Converter: Converts raw tickers into smooth, human-friendly spoken words
+  function cleanTickerPronunciation(symbol) {
+    if (!symbol) return "";
+    let s = symbol.trim().toUpperCase();
+
+    // Specific ticker phonetic replacements
+    const customMap = {
+      "GROWWPOWER": "Grow Power",
+      "GROWWHOSPI": "Grow Hospital",
+      "GROWWRAIL": "Grow Railway",
+      "GROWWEV": "Grow E V",
+      "GROWWCHEM": "Grow Chemical",
+      "GROWWDEFNC": "Grow Defence",
+      "MODEFENCE": "Moti-lal Defence",
+      "MOREALTY": "Moti-lal Realty",
+      "MOCAPITAL": "Moti-lal Capital",
+      "MON100": "Nasdaq 100",
+      "MOTOUR": "Moti-lal Tourism",
+      "MOVALUE": "Moti-lal Value",
+      "QUAL30IETF": "Quality 30 ETF",
+      "MOMENTUM50": "Momentum 50",
+      "MOM30IETF": "Momentum 30 ETF",
+      "LOWVOLIETF": "Low Volatility ETF",
+      "INSUREIETF": "Insurance ETF",
+      "PVTBANIETF": "Private Bank ETF",
+      "PSUBNKBEES": "P S U Bank Bees",
+      "HNGSNGBEES": "Hang Seng Bees",
+      "CONSUMBEES": "Consumption Bees",
+      "CPSEETF": "C P S E ETF",
+      "BFSI": "B F S I",
+      "OILIETF": "Oil ETF"
+    };
+
+    if (customMap[s]) {
+      return customMap[s];
+    }
+
+    // Generic rule: replace BEES and IETF with natural speech
+    s = s.replace(/BEES$/, " Bees");
+    s = s.replace(/IETF$/, " E T F");
+    s = s.replace(/ETF$/, " E T F");
+    s = s.replace(/^GROWW/, "Grow ");
+    return s;
+  }
+
   function cleanNumber(val) {
     if (!val) return 0;
     const num = parseFloat(val.toString().replace(/[₹,% ]/g, ""));
@@ -214,14 +259,9 @@
       const ltp = cleanNumber(row["Live Price (LTP)"]);
       const sma20TO = cleanNumber(row["SMA20 Turnover (₹ Cr)"]);
       const abScore = cleanNumber(row["Composite AB (%)"]);
-      
-      // Reads "Turnover Surge" or fallback "Surge formula"
       const surge = cleanNumber(row["Turnover Surge"] || row["Surge formula"]);
 
-      // STRICT FILTERS:
-      // 1. SMA20 Turnover >= ₹1.00 Cr (Institutional Liquidity)
-      // 2. Composite AB > 0% (Positive Trend / Zone A or B)
-      // 3. Turnover Surge > 1.0 (SMA10 > SMA20 Accumulation)
+      // Liquidity, Trend, and Surge criteria
       if (symbol && sma20TO >= 1.00 && abScore > 0 && surge > 1.00) {
         qualified.push({
           symbol,
@@ -234,7 +274,7 @@
       }
     });
 
-    // Ascending sort: lowest positive AB score first
+    // Ascending sort by Composite AB Score
     qualified.sort((a, b) => a.abScore - b.abScore);
 
     displayResults(qualified);
@@ -246,7 +286,7 @@
       document.getElementById("top-category").innerText = "No ETF cleared Turnover (> ₹1Cr), Positive AB, and Surge (> 1.0) today.";
       document.getElementById("top-price").innerText = "";
       document.getElementById("ranked-list").innerHTML = "<tr><td colspan='5' style='text-align: center;'>No qualified ETFs found today.</td></tr>";
-      voiceAnnouncementText = "Today there is no buy signal. No ETF qualified under liquidity, momentum, and surge rules.";
+      voiceAnnouncementText = "Today there is no buy signal. No ETF qualified under turnover, momentum, and surge rules.";
       return;
     }
 
@@ -255,17 +295,20 @@
     document.getElementById("top-category").innerText = `${top.category} (Surge: ${top.surge.toFixed(2)}x)`;
     document.getElementById("top-price").innerText = `Current Market Price: ₹${top.ltp.toFixed(2)}`;
 
-    // Build the audio script
+    // Build spoken script using the phonetic converter
     const top5 = list.slice(0, 5);
-    let speechParts = [`Today's top buy recommendation is ${top.symbol} in ${top.category} at ${Math.round(top.ltp)} rupees, with a volume surge of ${top.surge.toFixed(2)}. Here are all qualified ETFs. `];
+    const spokenTopName = cleanTickerPronunciation(top.symbol);
+    
+    let speechParts = [`Today's top buy recommendation is ${spokenTopName} in ${top.category} at ${Math.round(top.ltp)} rupees. Here are all qualified ETFs. `];
 
     top5.forEach((item, index) => {
-      speechParts.push(`Number ${index + 1}, ${item.symbol}, price ${Math.round(item.ltp)} rupees, surge ${item.surge.toFixed(2)}. `);
+      const spokenName = cleanTickerPronunciation(item.symbol);
+      speechParts.push(`Number ${index + 1}, ${spokenName}, price ${Math.round(item.ltp)} rupees. `);
     });
 
     voiceAnnouncementText = speechParts.join(" ");
 
-    // Render table
+    // Populate the visual table
     let tableHtml = "";
     top5.forEach((item, index) => {
       tableHtml += `
@@ -292,7 +335,7 @@
 
     const utterance = new SpeechSynthesisUtterance(voiceAnnouncementText);
     utterance.lang = 'en-IN';
-    utterance.rate = 0.88;
+    utterance.rate = 0.88; // Gentle, clear speed for seniors
     utterance.pitch = 1.0;
 
     window.speechSynthesis.speak(utterance);
