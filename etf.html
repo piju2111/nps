@@ -190,7 +190,7 @@
   </div>
 
   <div class="footer">
-    Rules: Turnover &ge; &#8377;1.00 Cr | AB% &gt; 0% (Ascending) | Volume Surge Priority
+    Rules: Turnover &ge; &#8377;1.00 Cr | AB% &gt; 0% | Turnover Surge &gt; 1.0 (Mandatory)
   </div>
 </div>
 
@@ -200,9 +200,8 @@
   let voiceAnnouncementText = "Scanning is in progress. Please wait.";
   let retryCount = 0;
   const MAX_RETRIES = 3;
-  const RETRY_DELAY_MS = 3000; // 3 seconds wait to allow Google Sheets formulas to evaluate
+  const RETRY_DELAY_MS = 3000; // Wait 3 seconds for Google cloud formulas to wake up
 
-  // Robust Number Parser: Handles Indian commas, %, ₹, spaces, "Cr"
   function cleanNumber(val) {
     if (val === undefined || val === null) return 0;
     let s = val.toString().trim();
@@ -212,7 +211,6 @@
     return isNaN(n) ? 0 : n;
   }
 
-  // Flexible Header Matcher: Detects columns even if headers vary slightly
   function findCol(row, candidates) {
     const keys = Object.keys(row);
     for (let c of candidates) {
@@ -222,7 +220,6 @@
     return undefined;
   }
 
-  // Phonetic Converter: Converts tickers into natural spoken English
   function cleanTickerPronunciation(symbol) {
     if (!symbol) return "";
     let s = symbol.trim().toUpperCase();
@@ -270,7 +267,6 @@
       document.getElementById("top-category").innerText = "Connecting to Google Sheet...";
     }
 
-    // Dynamic timestamp cache-buster forces fresh cloud evaluation
     const freshUrl = BASE_SHEET_CSV_URL + "&cacheBust=" + Date.now();
 
     Papa.parse(freshUrl, {
@@ -318,9 +314,11 @@
       const surge = cleanNumber(rawSurge);
 
       if (symbol && symbol !== "#N/A") {
-        // System Rules: SMA20 Turnover >= 1.00 Cr AND Positive AB Score (> 0%)
-        // Surge serves as display multiple & ranking priority
-        if (sma20TO >= 1.00 && abScore > 0) {
+        // MANDATORY FILTERS:
+        // 1. SMA20 Turnover >= 1.00 Cr
+        // 2. Composite AB > 0%
+        // 3. Turnover Surge > 1.00 (Hard mandatory requirement)
+        if (sma20TO >= 1.00 && abScore > 0 && surge > 1.00) {
           qualified.push({
             symbol,
             category,
@@ -333,7 +331,7 @@
       }
     });
 
-    // If 0 candidates returned and retries remain, auto-retry to allow Google formulas to finish waking
+    // If 0 qualify and we haven't exhausted retries, retry in case formulas were evaluating
     if (qualified.length === 0 && retryCount < MAX_RETRIES) {
       handleRetry();
       return;
@@ -344,7 +342,7 @@
       return;
     }
 
-    // Ascending sort: lowest positive AB score first
+    // Sort ascending by AB score
     qualified.sort((a, b) => a.abScore - b.abScore);
 
     displayResults(qualified);
@@ -359,11 +357,11 @@
     const top5 = list.slice(0, 5);
     const spokenTopName = cleanTickerPronunciation(top.symbol);
 
-    let speechParts = [`Today's top buy recommendation is ${spokenTopName} at ${Math.round(top.ltp)} rupees. Here are the top ranked ETFs. `];
+    let speechParts = [`Today's top buy recommendation is ${spokenTopName} at ${Math.round(top.ltp)} rupees, with volume surge ${top.surge.toFixed(2)}. Here are all qualified ETFs. `];
 
     top5.forEach((item, index) => {
       const spokenName = cleanTickerPronunciation(item.symbol);
-      speechParts.push(`Number ${index + 1}, ${spokenName}, price ${Math.round(item.ltp)} rupees. `);
+      speechParts.push(`Number ${index + 1}, ${spokenName}, price ${Math.round(item.ltp)} rupees, surge ${item.surge.toFixed(2)}. `);
     });
 
     voiceAnnouncementText = speechParts.join(" ");
@@ -386,15 +384,15 @@
 
   function renderNoSignal() {
     document.getElementById("top-ticker").innerText = "NO BUY SIGNAL";
-    document.getElementById("top-category").innerText = "No ETF cleared Turnover and Positive AB rules today.";
+    document.getElementById("top-category").innerText = "No ETF cleared Turnover (>= ₹1Cr), Positive AB (> 0%), and Surge (> 1.0) today.";
     document.getElementById("top-price").innerText = "";
     document.getElementById("ranked-list").innerHTML = `
       <tr>
         <td colspan="5" style="text-align: center; padding: 24px; font-size: 22px; color: #8b949e;">
-          No ETF qualified under portfolio rules today.
+          No ETF qualified under liquidity, momentum, and surge (> 1.0) rules today.
         </td>
       </tr>`;
-    voiceAnnouncementText = "Today there is no buy signal. No ETF qualified under portfolio rules.";
+    voiceAnnouncementText = "Today there is no buy signal. No ETF cleared liquidity, momentum, and surge rules.";
   }
 
   function speakAllTop5() {
@@ -413,10 +411,9 @@
     window.speechSynthesis.speak(utterance);
   }
 
-  // Load immediately on page open
   window.addEventListener('DOMContentLoaded', () => {
     loadETFData();
-    setInterval(loadETFData, 5 * 60 * 1000); // 5-minute auto-refresh
+    setInterval(loadETFData, 5 * 60 * 1000);
   });
 </script>
 
