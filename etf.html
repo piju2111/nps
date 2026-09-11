@@ -79,9 +79,8 @@
       color: #58a6ff;
       margin-bottom: 20px;
     }
-    /* Extra-Large Voice Button */
     .speaker-btn {
-      background: #238636; /* High-contrast green */
+      background: #238636; /* High-contrast accessible green */
       color: #ffffff;
       border: 3px solid #3fb950;
       border-radius: 50px;
@@ -156,7 +155,7 @@
     <h1>Today's ETF Buying Signal</h1>
   </div>
 
-  <!-- Big Primary Signal Card -->
+  <!-- Primary Pick Card -->
   <div id="top-pick-card" class="card highlight-card">
     <div class="badge">#1 Ranked Buy Today</div>
     <div id="top-ticker" class="ticker">Scanning...</div>
@@ -168,7 +167,7 @@
     </button>
   </div>
 
-  <!-- Big Table for Low Vision -->
+  <!-- Accessible Table -->
   <div class="card">
     <div class="table-title">Top 5 Eligible ETFs</div>
     <table>
@@ -195,7 +194,8 @@
 </div>
 
 <script>
-  const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRjjLROfZH15-ATOxhyE_LiprAfFl7yOxzPbfyryhdOhaQ6vEpJ-Q5b5DljHr3B0Ags8PxC8BYjC-fh/pub?gid=2034581734&single=true&output=csv";
+  // Clean, consistent base URL definition
+  const BASE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRjjLROfZH15-ATOxhyE_LiprAfFl7yOxzPbfyryhdOhaQ6vEpJ-Q5b5DljHr3B0Ags8PxC8BYjC-fh/pub?gid=2034581734&single=true&output=csv";
 
   let voiceAnnouncementText = "Scanning is in progress. Please wait.";
 
@@ -247,9 +247,9 @@
 
   async function loadETFData() {
     try {
-      // Appends an anti-cache timestamp query (&_t=123456789)
+      // Dynamic timestamp guarantees a fresh, un-cached fetch on the first attempt
       const freshUrl = BASE_SHEET_CSV_URL + "&_t=" + new Date().getTime();
-  
+
       Papa.parse(freshUrl, {
         download: true,
         header: true,
@@ -292,7 +292,7 @@
       }
     });
 
-    // Ascending sort by Composite AB
+    // Ascending sort: lowest positive AB score first
     qualified.sort((a, b) => a.abScore - b.abScore);
 
     displayResults(qualified);
@@ -313,7 +313,7 @@
     document.getElementById("top-category").innerText = `${top.category} (Surge: ${top.surge.toFixed(2)}x)`;
     document.getElementById("top-price").innerText = `Price: ₹${top.ltp.toFixed(2)}`;
 
-    // Spoken text
+    // Build the audio script
     const top5 = list.slice(0, 5);
     const spokenTopName = cleanTickerPronunciation(top.symbol);
     
@@ -326,7 +326,7 @@
 
     voiceAnnouncementText = speechParts.join(" ");
 
-    // High-contrast table rows
+    // Populate the table
     let tableHtml = "";
     top5.forEach((item, index) => {
       tableHtml += `
@@ -351,12 +351,15 @@
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(voiceAnnouncementText);
     utterance.lang = 'en-IN';
-    utterance.rate = 0.86; // Comfortable, deliberate speed
+    utterance.rate = 0.86;
     utterance.pitch = 1.0;
     window.speechSynthesis.speak(utterance);
   }
 
+  // Initial load on page open
   loadETFData();
+
+  // Background auto-refresh every 5 minutes
   setInterval(loadETFData, 5 * 60 * 1000);
 </script>
 
