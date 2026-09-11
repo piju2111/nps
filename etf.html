@@ -3,128 +3,149 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Today's ETF Recommendation</title>
-  <!-- PapaParse for clean CSV parsing -->
+  <title>Today's ETF Recommendation (Accessible)</title>
+  <!-- PapaParse for CSV parsing -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <style>
+    * {
+      box-sizing: border-box;
+    }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background-color: #f4f6f9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      background-color: #0b0f19;
+      color: #ffffff;
       margin: 0;
-      padding: 20px;
+      padding: 16px;
       display: flex;
       flex-direction: column;
       align-items: center;
     }
     .container {
-      max-width: 650px;
+      max-width: 800px;
       width: 100%;
     }
     .header {
       text-align: center;
-      margin-bottom: 20px;
+      margin-bottom: 24px;
     }
     .header h1 {
-      font-size: 26px;
-      color: #1a202c;
+      font-size: 34px;
+      font-weight: 900;
+      color: #ffffff;
       margin: 0;
+      letter-spacing: 0.5px;
     }
     .card {
-      background: white;
-      border-radius: 16px;
-      padding: 24px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-      margin-bottom: 20px;
+      background: #161b26;
+      border-radius: 20px;
+      padding: 28px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+      margin-bottom: 24px;
+      border: 2px solid #30363d;
     }
     .highlight-card {
-      border: 3px solid #2b6cb0;
-      background: #ebf8ff;
+      border: 4px solid #388bfd;
+      background: #121d2f;
       text-align: center;
-      position: relative;
     }
     .badge {
       display: inline-block;
-      padding: 6px 14px;
-      font-size: 14px;
-      font-weight: 700;
-      border-radius: 20px;
-      background: #3182ce;
-      color: white;
+      padding: 10px 20px;
+      font-size: 20px;
+      font-weight: 800;
+      border-radius: 30px;
+      background: #1f6feb;
+      color: #ffffff;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 1px;
     }
     .ticker {
-      font-size: 42px;
-      font-weight: 800;
-      color: #2b6cb0;
-      margin: 10px 0;
+      font-size: 64px;
+      font-weight: 900;
+      color: #ffd700; /* High-contrast golden yellow */
+      margin: 16px 0 10px 0;
+      line-height: 1.1;
+      word-break: break-word;
     }
     .details {
-      font-size: 18px;
-      color: #4a5568;
-      margin-bottom: 8px;
+      font-size: 26px;
+      font-weight: 600;
+      color: #e6edf3;
+      margin-bottom: 12px;
     }
     .price {
-      font-size: 22px;
-      font-weight: 700;
-      color: #2d3748;
-      margin-bottom: 14px;
+      font-size: 34px;
+      font-weight: 800;
+      color: #58a6ff;
+      margin-bottom: 20px;
     }
+    /* Extra-Large Voice Button */
     .speaker-btn {
-      background: #2b6cb0;
-      color: white;
-      border: none;
+      background: #238636; /* High-contrast green */
+      color: #ffffff;
+      border: 3px solid #3fb950;
       border-radius: 50px;
-      padding: 12px 24px;
-      font-size: 16px;
-      font-weight: 700;
+      padding: 18px 36px;
+      font-size: 24px;
+      font-weight: 800;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      box-shadow: 0 2px 6px rgba(43, 108, 176, 0.3);
-      transition: transform 0.1s, background 0.2s;
-    }
-    .speaker-btn:hover {
-      background: #2c5282;
+      justify-content: center;
+      gap: 12px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+      width: 100%;
+      max-width: 420px;
+      margin: 8px auto 0 auto;
     }
     .speaker-btn:active {
-      transform: scale(0.96);
+      background: #2ea043;
+      transform: scale(0.98);
     }
     .table-title {
-      font-size: 18px;
-      font-weight: 700;
-      margin-bottom: 12px;
-      color: #2d3748;
+      font-size: 26px;
+      font-weight: 800;
+      margin-bottom: 18px;
+      color: #ffffff;
+      border-bottom: 2px solid #30363d;
+      padding-bottom: 10px;
     }
     table {
       width: 100%;
       border-collapse: collapse;
     }
     th, td {
-      padding: 12px 10px;
+      padding: 16px 12px;
       text-align: left;
-      font-size: 15px;
-      border-bottom: 1px solid #e2e8f0;
+      font-size: 22px;
+      border-bottom: 1px solid #30363d;
     }
     th {
-      color: #718096;
-      font-size: 13px;
+      color: #8b949e;
+      font-size: 18px;
       text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .table-ticker {
+      font-weight: 900;
+      color: #ffd700;
+      font-size: 24px;
     }
     .ab-score {
-      font-weight: 700;
-      color: #2b6cb0;
+      font-weight: 800;
+      color: #58a6ff;
     }
     .surge-badge {
-      font-weight: 700;
-      color: #2f855a;
+      font-weight: 800;
+      color: #3fb950;
     }
     .footer {
       text-align: center;
-      font-size: 12px;
-      color: #a0aec0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #8b949e;
       margin-top: 10px;
+      line-height: 1.4;
     }
   </style>
 </head>
@@ -135,42 +156,41 @@
     <h1>Today's ETF Buying Signal</h1>
   </div>
 
-  <!-- Primary Recommendation Card -->
+  <!-- Big Primary Signal Card -->
   <div id="top-pick-card" class="card highlight-card">
     <div class="badge">#1 Ranked Buy Today</div>
     <div id="top-ticker" class="ticker">Scanning...</div>
     <div id="top-category" class="details">—</div>
     <div id="top-price" class="price">—</div>
 
-    <!-- Tap to Speak Button -->
     <button id="speak-btn" class="speaker-btn" onclick="speakAllTop5()">
       🔊 <span>Listen to Top 5</span>
     </button>
   </div>
 
-  <!-- Top 5 Ranked Candidates List -->
+  <!-- Big Table for Low Vision -->
   <div class="card">
-    <div class="table-title">Eligible ETFs (Surge > 1.0 & AB Ascending)</div>
+    <div class="table-title">Top 5 Eligible ETFs</div>
     <table>
       <thead>
         <tr>
           <th>#</th>
-          <th>ETF Ticker</th>
+          <th>Ticker</th>
           <th>Price</th>
-          <th>AB Score</th>
+          <th>AB%</th>
           <th>Surge</th>
         </tr>
       </thead>
       <tbody id="ranked-list">
         <tr>
-          <td colspan="5" style="text-align: center;">Loading latest sheet data...</td>
+          <td colspan="5" style="text-align: center; padding: 30px; font-size: 22px;">Loading data...</td>
         </tr>
       </tbody>
     </table>
   </div>
 
   <div class="footer">
-    Rules: SMA20 TO > ₹1.00 Cr | Turnover Surge > 1.0 | AB% Ascending
+    Rules: Turnover > ₹1.00 Cr | Surge > 1.0 | Ascending AB%
   </div>
 </div>
 
@@ -179,12 +199,10 @@
 
   let voiceAnnouncementText = "Scanning is in progress. Please wait.";
 
-  // Phonetic Converter: Converts raw tickers into smooth, human-friendly spoken words
   function cleanTickerPronunciation(symbol) {
     if (!symbol) return "";
     let s = symbol.trim().toUpperCase();
 
-    // Specific ticker phonetic replacements
     const customMap = {
       "GROWWPOWER": "Grow Power",
       "GROWWHOSPI": "Grow Hospital",
@@ -212,11 +230,8 @@
       "OILIETF": "Oil ETF"
     };
 
-    if (customMap[s]) {
-      return customMap[s];
-    }
+    if (customMap[s]) return customMap[s];
 
-    // Generic rule: replace BEES and IETF with natural speech
     s = s.replace(/BEES$/, " Bees");
     s = s.replace(/IETF$/, " E T F");
     s = s.replace(/ETF$/, " E T F");
@@ -241,7 +256,7 @@
         },
         error: function(err) {
           document.getElementById("top-ticker").innerText = "Error Loading";
-          voiceAnnouncementText = "Error loading latest market data.";
+          voiceAnnouncementText = "Error loading market data.";
           console.error(err);
         }
       });
@@ -261,7 +276,7 @@
       const abScore = cleanNumber(row["Composite AB (%)"]);
       const surge = cleanNumber(row["Turnover Surge"] || row["Surge formula"]);
 
-      // Liquidity, Trend, and Surge criteria
+      // Core System Filter: Turnover >= 1.00 Cr, AB > 0, Surge > 1.0
       if (symbol && sma20TO >= 1.00 && abScore > 0 && surge > 1.00) {
         qualified.push({
           symbol,
@@ -274,7 +289,7 @@
       }
     });
 
-    // Ascending sort by Composite AB Score
+    // Ascending sort by Composite AB
     qualified.sort((a, b) => a.abScore - b.abScore);
 
     displayResults(qualified);
@@ -283,23 +298,23 @@
   function displayResults(list) {
     if (list.length === 0) {
       document.getElementById("top-ticker").innerText = "NO BUY SIGNAL";
-      document.getElementById("top-category").innerText = "No ETF cleared Turnover (> ₹1Cr), Positive AB, and Surge (> 1.0) today.";
+      document.getElementById("top-category").innerText = "No ETF cleared Turnover, AB, and Surge rules.";
       document.getElementById("top-price").innerText = "";
-      document.getElementById("ranked-list").innerHTML = "<tr><td colspan='5' style='text-align: center;'>No qualified ETFs found today.</td></tr>";
-      voiceAnnouncementText = "Today there is no buy signal. No ETF qualified under turnover, momentum, and surge rules.";
+      document.getElementById("ranked-list").innerHTML = "<tr><td colspan='5' style='text-align: center; padding: 24px;'>No qualified ETFs found today.</td></tr>";
+      voiceAnnouncementText = "Today there is no buy signal. No ETF qualified under portfolio rules.";
       return;
     }
 
     const top = list[0];
     document.getElementById("top-ticker").innerText = top.symbol;
     document.getElementById("top-category").innerText = `${top.category} (Surge: ${top.surge.toFixed(2)}x)`;
-    document.getElementById("top-price").innerText = `Current Market Price: ₹${top.ltp.toFixed(2)}`;
+    document.getElementById("top-price").innerText = `Price: ₹${top.ltp.toFixed(2)}`;
 
-    // Build spoken script using the phonetic converter
+    // Spoken text
     const top5 = list.slice(0, 5);
     const spokenTopName = cleanTickerPronunciation(top.symbol);
     
-    let speechParts = [`Today's top buy recommendation is ${spokenTopName} in ${top.category} at ${Math.round(top.ltp)} rupees. Here are all qualified ETFs. `];
+    let speechParts = [`Today's top buy recommendation is ${spokenTopName} at ${Math.round(top.ltp)} rupees. Here are the top ranked ETFs. `];
 
     top5.forEach((item, index) => {
       const spokenName = cleanTickerPronunciation(item.symbol);
@@ -308,13 +323,13 @@
 
     voiceAnnouncementText = speechParts.join(" ");
 
-    // Populate the visual table
+    // High-contrast table rows
     let tableHtml = "";
     top5.forEach((item, index) => {
       tableHtml += `
         <tr>
           <td><strong>#${index + 1}</strong></td>
-          <td><strong>${item.symbol}</strong></td>
+          <td class="table-ticker">${item.symbol}</td>
           <td>₹${item.ltp.toFixed(2)}</td>
           <td class="ab-score">+${item.abScore.toFixed(2)}%</td>
           <td class="surge-badge">${item.surge.toFixed(2)}x</td>
@@ -330,14 +345,11 @@
       alert("Text-to-speech is not supported by your browser.");
       return;
     }
-
     window.speechSynthesis.cancel();
-
     const utterance = new SpeechSynthesisUtterance(voiceAnnouncementText);
     utterance.lang = 'en-IN';
-    utterance.rate = 0.88; // Gentle, clear speed for seniors
+    utterance.rate = 0.86; // Comfortable, deliberate speed
     utterance.pitch = 1.0;
-
     window.speechSynthesis.speak(utterance);
   }
 
