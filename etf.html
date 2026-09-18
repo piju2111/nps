@@ -190,7 +190,7 @@
   </div>
 
   <div class="footer">
-    Rules: Turnover &ge; &#8377;1.00 Cr | AB% &gt; 0% | Turnover Surge &gt; 1.0 (Mandatory)
+    Rules: Turnover &ge; &#8377;1.00 Cr | Zone A (-3.0% to +3.0%) | Turnover Surge &gt; 1.0 (Mandatory)
   </div>
 </div>
 
@@ -316,9 +316,9 @@
       if (symbol && symbol !== "#N/A") {
         // MANDATORY FILTERS:
         // 1. SMA20 Turnover >= 1.00 Cr
-        // 2. Composite AB > 0%
-        // 3. Turnover Surge > 1.00 (Hard mandatory requirement)
-        if (sma20TO >= 1.00 && abScore > 0 && surge > 1.00) {
+        // 2. Composite AB in Zone A: -3.00% to +3.00%
+        // 3. Turnover Surge > 1.00 (Mandatory volume multiple)
+        if (sma20TO >= 1.00 && abScore >= -3.00 && abScore <= 3.00 && surge > 1.00) {
           qualified.push({
             symbol,
             category,
@@ -342,7 +342,7 @@
       return;
     }
 
-    // Sort ascending by AB score
+    // Sort ascending by AB score (mean-reversion closest to -3% / 20 SMA base first)
     qualified.sort((a, b) => a.abScore - b.abScore);
 
     displayResults(qualified);
@@ -361,19 +361,23 @@
 
     top5.forEach((item, index) => {
       const spokenName = cleanTickerPronunciation(item.symbol);
-      speechParts.push(`Number ${index + 1}, ${spokenName}, price ${Math.round(item.ltp)} rupees, surge ${item.surge.toFixed(2)}. `);
+      const spokenAb = item.abScore < 0 
+        ? `negative ${Math.abs(item.abScore).toFixed(1)} percent` 
+        : `positive ${item.abScore.toFixed(1)} percent`;
+      speechParts.push(`Number ${index + 1}, ${spokenName}, price ${Math.round(item.ltp)} rupees, volume surge ${item.surge.toFixed(2)}, momentum score ${spokenAb}. `);
     });
 
     voiceAnnouncementText = speechParts.join(" ");
 
     let tableHtml = "";
     top5.forEach((item, index) => {
+      const formattedAb = (item.abScore > 0 ? "+" : "") + item.abScore.toFixed(2) + "%";
       tableHtml += `
         <tr>
           <td><strong>#${index + 1}</strong></td>
           <td class="table-ticker">${item.symbol}</td>
           <td>₹${item.ltp.toFixed(2)}</td>
-          <td class="ab-score">+${item.abScore.toFixed(2)}%</td>
+          <td class="ab-score">${formattedAb}</td>
           <td class="surge-badge">${item.surge.toFixed(2)}x</td>
         </tr>
       `;
@@ -384,15 +388,15 @@
 
   function renderNoSignal() {
     document.getElementById("top-ticker").innerText = "NO BUY SIGNAL";
-    document.getElementById("top-category").innerText = "No ETF cleared Turnover (>= ₹1Cr), Positive AB (> 0%), and Surge (> 1.0) today.";
+    document.getElementById("top-category").innerText = "No ETF cleared Turnover (>= ₹1Cr), Zone A (-3% to +3%), and Surge (> 1.0) today.";
     document.getElementById("top-price").innerText = "";
     document.getElementById("ranked-list").innerHTML = `
       <tr>
         <td colspan="5" style="text-align: center; padding: 24px; font-size: 22px; color: #8b949e;">
-          No ETF qualified under liquidity, momentum, and surge (> 1.0) rules today.
+          No ETF qualified under liquidity, Zone A (-3% to +3%), and surge (> 1.0) rules today.
         </td>
       </tr>`;
-    voiceAnnouncementText = "Today there is no buy signal. No ETF cleared liquidity, momentum, and surge rules.";
+    voiceAnnouncementText = "Today there is no buy signal. No ETF qualified under liquidity, Zone A, and surge rules.";
   }
 
   function speakAllTop5() {
