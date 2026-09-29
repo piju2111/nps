@@ -3,9 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Today's ETF Recommendation (Accessible)</title>
-  <!-- PapaParse for CSV parsing -->
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <title>Today's ETF Recommendation (Accessible & Secured)</title>
   <style>
     * {
       box-sizing: border-box;
@@ -27,6 +25,7 @@
     .header {
       text-align: center;
       margin-bottom: 24px;
+      position: relative;
     }
     .header h1 {
       font-size: 34px;
@@ -35,6 +34,69 @@
       margin: 0;
       letter-spacing: 0.5px;
     }
+    .lock-btn {
+      position: absolute;
+      right: 0;
+      top: 4px;
+      background: #161b26;
+      color: #94a3b8;
+      border: 1px solid #30363d;
+      padding: 6px 12px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .lock-btn:hover { color: #fff; border-color: #ef4444; }
+
+    /* Security PIN Modal */
+    .pin-modal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(11, 15, 25, 0.95);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .pin-card {
+      background: #161b26;
+      border: 2px solid #388bfd;
+      border-radius: 16px;
+      padding: 30px;
+      max-width: 360px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+    }
+    .pin-input {
+      width: 100%;
+      padding: 14px;
+      font-size: 24px;
+      text-align: center;
+      letter-spacing: 8px;
+      border-radius: 8px;
+      border: 1px solid #30363d;
+      background: #0b0f19;
+      color: #ffffff;
+      margin: 16px 0;
+    }
+    .pin-btn {
+      width: 100%;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: 800;
+      border-radius: 8px;
+      border: none;
+      background: #0284c7;
+      color: #ffffff;
+      cursor: pointer;
+    }
+    .pin-btn:hover { background: #0369a1; }
+    .pin-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .pin-error { color: #f87171; font-size: 13px; margin-top: 10px; display: none; }
+
+    /* Cards */
     .card {
       background: #161b26;
       border-radius: 20px;
@@ -62,7 +124,7 @@
     .ticker {
       font-size: 64px;
       font-weight: 900;
-      color: #ffd700; /* High-contrast golden yellow */
+      color: #ffd700;
       margin: 16px 0 10px 0;
       line-height: 1.1;
       word-break: break-word;
@@ -79,7 +141,6 @@
       color: #58a6ff;
       margin-bottom: 20px;
     }
-    /* Large Accessible Voice Button */
     .speaker-btn {
       background: #238636;
       color: #ffffff;
@@ -101,6 +162,10 @@
     .speaker-btn:active {
       background: #2ea043;
       transform: scale(0.98);
+    }
+    .speaker-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
     .table-title {
       font-size: 26px;
@@ -151,9 +216,21 @@
 </head>
 <body>
 
+<!-- Security PIN Modal -->
+<div id="pin-modal" class="pin-modal">
+  <div class="pin-card">
+    <h2 style="margin: 0; font-size: 20px; color: #38bdf8;">Portfolio Login</h2>
+    <p style="color: #94a3b8; font-size: 13px; margin: 8px 0 0 0;">Enter your 4-digit security PIN</p>
+    <input type="password" id="pin-input" class="pin-input" maxlength="8" placeholder="••••" />
+    <button id="pin-submit-btn" class="pin-btn" onclick="submitPin()">Unlock Scanner</button>
+    <div id="pin-error" class="pin-error">Incorrect PIN. Try again.</div>
+  </div>
+</div>
+
 <div class="container">
   <div class="header">
     <h1>Today's ETF Buying Signal</h1>
+    <button class="lock-btn" onclick="logout()">🔒 Lock</button>
   </div>
 
   <!-- Primary Signal Card -->
@@ -163,7 +240,7 @@
     <div id="top-category" class="details">Connecting to Google Sheet...</div>
     <div id="top-price" class="price">—</div>
 
-    <button id="speak-btn" class="speaker-btn" onclick="speakAllTop5()">
+    <button id="speak-btn" class="speaker-btn" onclick="speakAllTop5()" disabled>
       🔊 <span>Listen to Top 5</span>
     </button>
   </div>
@@ -183,24 +260,22 @@
       </thead>
       <tbody id="ranked-list">
         <tr>
-          <td colspan="5" style="text-align: center; padding: 30px; font-size: 22px;">Loading data...</td>
+          <td colspan="5" style="text-align: center; padding: 30px; font-size: 22px;">Awaiting authentication...</td>
         </tr>
       </tbody>
     </table>
   </div>
 
   <div class="footer">
-    Rules: Turnover &ge; &#8377;1.00 Cr | Zone A (-3.0% to +3.0%) | Turnover Surge &gt; 1.0 (Mandatory)
+    Rules: Turnover &ge; ₹1.00 Cr | Zone A (-3.0% to +3.0%) | Turnover Surge &gt; 1.0 (Mandatory)
   </div>
 </div>
 
 <script>
-  const BASE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRjjLROfZH15-ATOxhyE_LiprAfFl7yOxzPbfyryhdOhaQ6vEpJ-Q5b5DljHr3B0Ags8PxC8BYjC-fh/pub?gid=2034581734&single=true&output=csv";
+  // Secured Apps Script Web App URL
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzWWXqG0iOrWth6_fWGyY7tRwrRBNY2Ni6b1v3UcowDCJeiIzt0anW0Vrjbf6uYcadr/exec";
 
   let voiceAnnouncementText = "Scanning is in progress. Please wait.";
-  let retryCount = 0;
-  const MAX_RETRIES = 3;
-  const RETRY_DELAY_MS = 3000; // Wait 3 seconds for Google cloud formulas to wake up
 
   function cleanNumber(val) {
     if (val === undefined || val === null) return 0;
@@ -209,15 +284,6 @@
     s = s.replace(/₹/g, "").replace(/,/g, "").replace(/%/g, "").replace(/x/gi, "").trim();
     const n = parseFloat(s);
     return isNaN(n) ? 0 : n;
-  }
-
-  function findCol(row, candidates) {
-    const keys = Object.keys(row);
-    for (let c of candidates) {
-      const foundKey = keys.find(k => k.trim().toLowerCase() === c.toLowerCase());
-      if (foundKey) return row[foundKey];
-    }
-    return undefined;
   }
 
   function cleanTickerPronunciation(symbol) {
@@ -260,58 +326,110 @@
     return s;
   }
 
-  function loadETFData(isRetry = false) {
-    if (!isRetry) {
-      retryCount = 0;
-      document.getElementById("top-ticker").innerText = "Scanning...";
-      document.getElementById("top-category").innerText = "Connecting to Google Sheet...";
-    }
-
-    const freshUrl = BASE_SHEET_CSV_URL + "&cacheBust=" + Date.now();
-
-    Papa.parse(freshUrl, {
-      download: true,
-      header: true,
-      skipEmptyLines: true,
-      complete: function(results) {
-        if (!results.data || results.data.length === 0) {
-          handleRetry();
-          return;
-        }
-        processSheetRows(results.data);
-      },
-      error: function(err) {
-        console.error(err);
-        handleRetry();
-      }
-    });
-  }
-
-  function handleRetry() {
-    if (retryCount < MAX_RETRIES) {
-      retryCount++;
-      document.getElementById("top-ticker").innerText = "Waking Engine...";
-      document.getElementById("top-category").innerText = `Updating sheet formulas. Retrying (${retryCount}/${MAX_RETRIES})...`;
-
-      setTimeout(() => {
-        loadETFData(true);
-      }, RETRY_DELAY_MS);
+  // Lifecycle & Session Handling
+  window.addEventListener("DOMContentLoaded", () => {
+    const savedPin = sessionStorage.getItem("portfolio_pin");
+    if (savedPin) {
+      document.getElementById("pin-modal").style.display = "none";
+      loadETFData(savedPin);
     } else {
-      renderNoSignal();
+      document.getElementById("pin-modal").style.display = "flex";
+      document.getElementById("pin-input").focus();
+    }
+
+    document.getElementById("pin-input").addEventListener("keypress", (e) => {
+      if (e.key === "Enter") submitPin();
+    });
+  });
+
+  function submitPin() {
+    const pin = document.getElementById("pin-input").value.trim();
+    if (!pin) return;
+    document.getElementById("pin-error").style.display = "none";
+    loadETFData(pin);
+  }
+
+  function logout() {
+    sessionStorage.removeItem("portfolio_pin");
+    location.reload();
+  }
+
+  async function loadETFData(pin) {
+    const btn = document.getElementById("pin-submit-btn");
+    const errDiv = document.getElementById("pin-error");
+    btn.innerText = "Verifying...";
+    btn.disabled = true;
+    errDiv.style.display = "none";
+
+    document.getElementById("top-ticker").innerText = "Scanning...";
+    document.getElementById("top-category").innerText = "Connecting to Google Sheet...";
+
+    try {
+      const targetUrl = `${APPS_SCRIPT_URL}?pin=${encodeURIComponent(pin)}&_t=${Date.now()}`;
+      
+      const response = await fetch(targetUrl, {
+        method: "GET",
+        redirect: "follow"
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP Error: ${response.status}`);
+      }
+
+      const res = await response.json();
+
+      if (res.status !== "success") {
+        document.getElementById("pin-modal").style.display = "flex";
+        errDiv.innerText = res.message || "Incorrect PIN. Try again.";
+        errDiv.style.display = "block";
+        document.getElementById("pin-input").value = "";
+        document.getElementById("pin-input").focus();
+        sessionStorage.removeItem("portfolio_pin");
+        return;
+      }
+
+      // Valid Authentication
+      sessionStorage.setItem("portfolio_pin", pin);
+      document.getElementById("pin-modal").style.display = "none";
+
+      processWatchlistData(res.watchlist);
+
+    } catch (err) {
+      console.error("Fetch Error:", err);
+      errDiv.innerText = "Connection failed: Check internet or script deployment.";
+      errDiv.style.display = "block";
+      document.getElementById("top-ticker").innerText = "Connection Error";
+      document.getElementById("top-category").innerText = "Failed to load data from Apps Script.";
+    } finally {
+      btn.innerText = "Unlock Scanner";
+      btn.disabled = false;
     }
   }
 
-  function processSheetRows(rows) {
+  function processWatchlistData(watchlistRaw) {
+    if (!watchlistRaw || watchlistRaw.length < 2) {
+      renderNoSignal();
+      return;
+    }
+
+    const headers = watchlistRaw[0].map(h => (h || "").toString().trim().toLowerCase());
+    const symIdx = headers.findIndex(h => h.includes("symbol") || h.includes("ticker"));
+    const catIdx = headers.findIndex(h => h.includes("category") || h.includes("bucket"));
+    const ltpIdx = headers.findIndex(h => h.includes("ltp") || h.includes("live price"));
+    const toIdx  = headers.findIndex(h => h.includes("sma20 turnover") || h.includes("turnover (₹ cr)"));
+    const surgeIdx = headers.findIndex(h => h.includes("turnover surge") || h.includes("surge"));
+    const abIdx  = headers.findIndex(h => h.includes("composite ab") || h.includes("ab (%)"));
+
     const qualified = [];
 
-    rows.forEach(row => {
-      const symbol = (findCol(row, ["Symbol", "Ticker", "ETF Ticker"]) || "").trim();
-      const category = (findCol(row, ["Category / Bucket", "Category", "Bucket"]) || "").trim();
-      const ltp = cleanNumber(findCol(row, ["Live Price (LTP)", "LTP", "Price", "Current Price"]));
-      const sma20TO = cleanNumber(findCol(row, ["SMA20 Turnover (₹ Cr)", "SMA20 Turnover", "Turnover (in billion)", "Turnover"]));
-      const abScore = cleanNumber(findCol(row, ["Composite AB (%)", "Composite AB", "AB Score", "Ab score"]));
-      const rawSurge = findCol(row, ["Turnover Surge", "Turnover srg%", "Surge formula", "Surge", "TO Srg%"]);
-      const surge = cleanNumber(rawSurge);
+    for (let i = 1; i < watchlistRaw.length; i++) {
+      const row = watchlistRaw[i];
+      const symbol = (row[symIdx] || "").toString().replace("NSE:", "").trim().toUpperCase();
+      const category = catIdx !== -1 ? (row[catIdx] || "").toString().trim() : "";
+      const ltp = cleanNumber(row[ltpIdx]);
+      const sma20TO = cleanNumber(row[toIdx]);
+      const surge = cleanNumber(row[surgeIdx]);
+      const abScore = cleanNumber(row[abIdx]);
 
       if (symbol && symbol !== "#N/A") {
         // MANDATORY FILTERS:
@@ -329,12 +447,6 @@
           });
         }
       }
-    });
-
-    // If 0 qualify and we haven't exhausted retries, retry in case formulas were evaluating
-    if (qualified.length === 0 && retryCount < MAX_RETRIES) {
-      handleRetry();
-      return;
     }
 
     if (qualified.length === 0) {
@@ -368,6 +480,7 @@
     });
 
     voiceAnnouncementText = speechParts.join(" ");
+    document.getElementById("speak-btn").disabled = false;
 
     let tableHtml = "";
     top5.forEach((item, index) => {
@@ -390,6 +503,7 @@
     document.getElementById("top-ticker").innerText = "NO BUY SIGNAL";
     document.getElementById("top-category").innerText = "No ETF cleared Turnover (>= ₹1Cr), Zone A (-3% to +3%), and Surge (> 1.0) today.";
     document.getElementById("top-price").innerText = "";
+    document.getElementById("speak-btn").disabled = true;
     document.getElementById("ranked-list").innerHTML = `
       <tr>
         <td colspan="5" style="text-align: center; padding: 24px; font-size: 22px; color: #8b949e;">
@@ -415,11 +529,13 @@
     window.speechSynthesis.speak(utterance);
   }
 
-  window.addEventListener('DOMContentLoaded', () => {
-    loadETFData();
-    setInterval(loadETFData, 5 * 60 * 1000);
-  });
+  // 5-minute auto-refresh if already authenticated
+  setInterval(() => {
+    const savedPin = sessionStorage.getItem("portfolio_pin");
+    if (savedPin) {
+      loadETFData(savedPin);
+    }
+  }, 5 * 60 * 1000);
 </script>
-
 </body>
 </html>
