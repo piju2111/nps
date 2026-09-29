@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ETF Exit & Liquidation Scanner (Secured)</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      background-color: #0b0f19;
+      color: #ffffff;
+      margin: 0;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .container { max-width: 950px; width: 100%; }
+    .header { text-align: center; margin-bottom: 20px; }
+    .header h1 { font-size: 28px; font-weight: 900; margin: 0; color: #38bdf8; }
+    .header p { color: #94a3b8; font-size: 14px; margin-top: 6px; }
+
+    /* Security PIN Modal */
+    .pin-modal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(11, 15, 25, 0.95);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .pin-card {
+      background: #161b26;
+      border: 2px solid #38bdf8;
+      border-radius: 16px;
+      padding: 30px;
+      max-width: 360px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+    }
+    .pin-input {
+      width: 100%;
+      padding: 14px;
+      font-size: 24px;
+      text-align: center;
+      letter-spacing: 8px;
+      border-radius: 8px;
+      border: 1px solid #30363d;
+      background: #0b0f19;
+      color: #ffffff;
+      margin: 16px 0;
+    }
+    .pin-btn {
+      width: 100%;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: 800;
+      border-radius: 8px;
+      border: none;
+      background: #0284c7;
+      color: #ffffff;
+      cursor: pointer;
+    }
+    .pin-btn:hover { background: #0369a1; }
+    .pin-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .pin-error { color: #f87171; font-size: 13px; margin-top: 10px; display: none; }
+
+    /* Summary Bar */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      background: #161b26;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      padding: 14px;
+      text-align: center;
+    }
+    .stat-num { font-size: 26px; font-weight: 900; margin-top: 4px; }
+    .stat-label { font-size: 11px; text-transform: uppercase; color: #8b949e; }
+
+    /* Action Banner */
+    .banner {
+      background: #161b26;
+      border-radius: 16px;
+      padding: 20px;
+      border: 2px solid #30363d;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .banner.alert-sell { border-color: #ef4444; background: #2a1215; }
+    .banner.alert-hold { border-color: #22c55e; background: #0f2419; }
+    .banner-title { font-size: 22px; font-weight: 800; margin-bottom: 6px; }
+    .banner-sub { font-size: 14px; color: #cbd5e1; }
+
+    .speaker-btn {
+      background: #0284c7;
+      color: white;
+      border: none;
+      border-radius: 50px;
+      padding: 12px 24px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .speaker-btn:hover { background: #0369a1; }
+
+    /* Filters */
+    .filters { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+    .filter-btn {
+      background: #161b26;
+      color: #94a3b8;
+      border: 1px solid #30363d;
+      padding: 8px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .filter-btn.active { background: #38bdf8; color: #000; border-color: #38bdf8; }
+
+    /* Table */
+    .card {
+      background: #161b26;
+      border-radius: 16px;
+      padding: 16px;
+      border: 1px solid #30363d;
+      overflow-x: auto;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 12px 8px; text-align: left; font-size: 13px; border-bottom: 1px solid #21262d; }
+    th { color: #8b949e; font-size: 11px; text-transform: uppercase; }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .badge-sell { background: #ef4444; color: #ffffff; }
+    .badge-shield { background: #f59e0b; color: #000000; }
+    .badge-hold { background: #21262d; color: #8b949e; }
+    .broker-badge { padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; background: #1e293b; color: #93c5fd; }
+  </style>
+</head>
+<body>
+
+<!-- PIN Modal -->
+<div id="pin-modal" class="pin-modal">
+  <div class="pin-card">
+    <h2 style="margin: 0; font-size: 20px; color: #38bdf8;">Portfolio Login</h2>
+    <p style="color: #94a3b8; font-size: 13px; margin: 8px 0 0 0;">Enter your 4-digit security PIN</p>
+    <input type="password" id="pin-input" class="pin-input" maxlength="8" placeholder="••••" />
+    <button id="pin-submit-btn" class="pin-btn" onclick="submitPin()">Unlock Scanner</button>
+    <div id="pin-error" class="pin-error">Incorrect PIN. Try again.</div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="header">
+    <h1>ETF Exit & Liquidation Scanner</h1>
+    <p>Systematic Monitoring: +2.0% Isolated Broker Hurdle & Momentum Shield Override</p>
+  </div>
+
+  <div class="summary-grid">
+    <div class="stat-card">
+      <div class="stat-label">Total Positions</div>
+      <div id="stat-total" class="stat-num" style="color: #94a3b8;">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Actionable Sells</div>
+      <div id="stat-sell" class="stat-num" style="color: #ef4444;">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Momentum Shield</div>
+      <div id="stat-shield" class="stat-num" style="color: #f59e0b;">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Below Hurdle (Hold)</div>
+      <div id="stat-hold" class="stat-num" style="color: #4ade80;">—</div>
+    </div>
+  </div>
+
+  <div id="action-banner" class="banner">
+    <div id="banner-title" class="banner-title">Authenticating...</div>
+    <div id="banner-sub" class="banner-sub">Please unlock using your security PIN.</div>
+    <button id="speak-btn" class="speaker-btn" onclick="speakSummary()" style="display:none;">
+      🔊 <span>Listen to Exit Summary</span>
+    </button>
+  </div>
+
+  <div class="filters">
+    <button class="filter-btn active" onclick="setFilter('all', this)">All Holdings</button>
+    <button class="filter-btn" onclick="setFilter('sell', this)">🔴 Sell Triggers Only</button>
+    <button class="filter-btn" onclick="setFilter('shield', this)">🟡 Momentum Shield</button>
+    <button class="filter-btn" onclick="setFilter('hold', this)">⚪ Normal Hold</button>
+    <button class="filter-btn" style="margin-left: auto;" onclick="logout()">🔒 Lock</button>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Broker</th>
+          <th>Symbol</th>
+          <th>Type</th>
+          <th>Qty</th>
+          <th>Avg Cost</th>
+          <th>LTP</th>
+          <th>P&L %</th>
+          <th>Surge</th>
+          <th>AB Score</th>
+          <th>Directive</th>
+        </tr>
+      </thead>
+      <tbody id="holdings-table">
+        <tr><td colspan="10" style="text-align: center; color: #8b949e; padding: 24px;">Awaiting PIN entry...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  // Your live Google Apps Script Web App URL
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzWWXqG0iOrWth6_fWGyY7tRwrRBNY2Ni6b1v3UcowDCJeiIzt0anW0Vrjbf6uYcadr/exec";
+
+  let evaluatedHoldings = [];
+  let currentFilter = "all";
+  let voiceScript = "Zero sell orders triggered.";
+
+  function cleanNumber(val) {
+    if (val === undefined || val === null) return 0;
+    const num = parseFloat(val.toString().replace(/[₹,% x]/g, "").trim());
+    return isNaN(num) ? 0 : num;
+  }
+
+  window.addEventListener("DOMContentLoaded", () => {
+    const savedPin = sessionStorage.getItem("portfolio_pin");
+    if (savedPin) {
+      document.getElementById("pin-modal").style.display = "none";
+      fetchData(savedPin);
+    } else {
+      document.getElementById("pin-modal").style.display = "flex";
+      document.getElementById("pin-input").focus();
+    }
+
+    document.getElementById("pin-input").addEventListener("keypress", (e) => {
+      if (e.key === "Enter") submitPin();
+    });
+  });
+
+  function submitPin() {
+    const pin = document.getElementById("pin-input").value.trim();
+    if (!pin) return;
+    document.getElementById("pin-error").style.display = "none";
+    fetchData(pin);
+  }
+
+  function logout() {
+    sessionStorage.removeItem("portfolio_pin");
+    location.reload();
+  }
+
+  async function fetchData(pin) {
+    const btn = document.getElementById("pin-submit-btn");
+    const errDiv = document.getElementById("pin-error");
+    btn.innerText = "Verifying...";
+    btn.disabled = true;
+    errDiv.style.display = "none";
+
+    document.getElementById("banner-title").innerText = "Connecting to Portfolio...";
+    document.getElementById("banner-sub").innerText = "Validating PIN with Google Sheets...";
+
+    try {
+      const targetUrl = `${APPS_SCRIPT_URL}?pin=${encodeURIComponent(pin)}&_t=${Date.now()}`;
+      
+      // Explicit redirect: "follow" to resolve Google Apps Script 302 redirects
+      const response = await fetch(targetUrl, {
+        method: "GET",
+        redirect: "follow"
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP Error: ${response.status}`);
+      }
+
+      const res = await response.json();
+
+      if (res.status !== "success") {
+        document.getElementById("pin-modal").style.display = "flex";
+        errDiv.innerText = res.message || "Incorrect PIN. Try again.";
+        errDiv.style.display = "block";
+        document.getElementById("pin-input").value = "";
+        document.getElementById("pin-input").focus();
+        sessionStorage.removeItem("portfolio_pin");
+        btn.innerText = "Unlock Scanner";
+        btn.disabled = false;
+        return;
+      }
+
+      // Valid PIN
+      sessionStorage.setItem("portfolio_pin", pin);
+      document.getElementById("pin-modal").style.display = "none";
+      processPayload(res.holdings, res.watchlist);
+
+    } catch (err) {
+      console.error("Fetch Error:", err);
+      errDiv.innerText = "Connection failed: Check internet or script deployment.";
+      errDiv.style.display = "block";
+      document.getElementById("banner-title").innerText = "Connection Failed";
+      document.getElementById("banner-sub").innerText = "Unable to fetch data from Apps Script.";
+    } finally {
+      btn.innerText = "Unlock Scanner";
+      btn.disabled = false;
+    }
+  }
+
+  function processPayload(holdingsRaw, watchlistRaw) {
+    if (!holdingsRaw || holdingsRaw.length < 2) {
+      document.getElementById("holdings-table").innerHTML = `<tr><td colspan="10" style="text-align:center; padding:24px; color:#8b949e;">Holdings tab (DB_for_ETF) is empty.</td></tr>`;
+      return;
+    }
+
+    // Parse Watchlist tab
+    const marketMap = {};
+    if (watchlistRaw && watchlistRaw.length > 1) {
+      const wHeaders = watchlistRaw[0].map(h => (h || "").toString().trim().toLowerCase());
+      const symIdx = wHeaders.findIndex(h => h.includes("symbol") || h.includes("ticker"));
+      const ltpIdx = wHeaders.findIndex(h => h.includes("ltp") || h.includes("live price"));
+      const surgeIdx = wHeaders.findIndex(h => h.includes("surge"));
+      const abIdx = wHeaders.findIndex(h => h.includes("composite ab") || h.includes("ab (%)"));
+
+      for (let i = 1; i < watchlistRaw.length; i++) {
+        const r = watchlistRaw[i];
+        const s = (r[symIdx] || "").toString().replace("NSE:", "").trim().toUpperCase();
+        if (s) {
+          marketMap[s] = {
+            ltp: cleanNumber(r[ltpIdx]),
+            surge: cleanNumber(r[surgeIdx]),
+            abScore: cleanNumber(r[abIdx])
+          };
+        }
+      }
+    }
+
+    // Parse Holdings tab (DB_for_ETF)
+    const hHeaders = holdingsRaw[0].map(h => (h || "").toString().trim().toLowerCase());
+    const bBroker = hHeaders.findIndex(h => h.includes("broker"));
+    const bSymbol = hHeaders.findIndex(h => h.includes("symbol") || h.includes("ticker"));
+    const bMaster = hHeaders.findIndex(h => h.includes("master"));
+    const bQty = hHeaders.findIndex(h => h.includes("qty") || h.includes("quantity"));
+    const bAvg = hHeaders.findIndex(h => h.includes("avg"));
+
+    evaluatedHoldings = [];
+
+    for (let i = 1; i < holdingsRaw.length; i++) {
+      const row = holdingsRaw[i];
+      const broker = (row[bBroker] || "").toString().trim();
+      const symbol = (row[bSymbol] || "").toString().replace("NSE:", "").trim().toUpperCase();
+      const inMaster = (row[bMaster] || "").toString().trim().toLowerCase() === "yes";
+      const qty = cleanNumber(row[bQty]);
+      const avgPrice = cleanNumber(row[bAvg]);
+
+      if (!symbol || qty <= 0 || avgPrice <= 0) continue;
+
+      const m = marketMap[symbol] || { ltp: 0, surge: 0, abScore: 0 };
+      const ltp = m.ltp;
+      const gainPct = ltp > 0 ? ((ltp - avgPrice) / avgPrice) * 100 : 0;
+      const meetsHurdle = ltp >= avgPrice * 1.02;
+
+      let status = "HOLD";
+      let badgeClass = "badge-hold";
+      let directive = "Below +2.0% hurdle";
+
+      if (!meetsHurdle) {
+        status = "HOLD";
+        badgeClass = "badge-hold";
+        directive = "HOLD (RED/COST)";
+      } else if (!inMaster) {
+        status = "SELL";
+        badgeClass = "badge-sell";
+        directive = `FULL EXIT ${qty} qty @ ₹${ltp.toFixed(2)}`;
+      } else {
+        const inZoneA = m.abScore >= -3.00 && m.abScore <= 3.00;
+        const isSurgeHigh = m.surge > 1.00;
+
+        if (inZoneA && isSurgeHigh) {
+          status = "SHIELD";
+          badgeClass = "badge-shield";
+          directive = "MOMENTUM SHIELD (Ride Breakout)";
+        } else {
+          status = "SELL";
+          badgeClass = "badge-sell";
+          directive = `FULL EXIT ${qty} qty @ ₹${ltp.toFixed(2)}`;
+        }
+      }
+
+      evaluatedHoldings.push({
+        broker,
+        symbol,
+        categoryType: inMaster ? "Master" : "Legacy",
+        qty,
+        avgPrice,
+        ltp,
+        gainPct,
+        surge: m.surge,
+        abScore: m.abScore,
+        status,
+        badgeClass,
+        directive
+      });
+    }
+
+    renderUI();
+  }
+
+  function renderUI() {
+    let sellCount = 0, shieldCount = 0, holdCount = 0;
+    evaluatedHoldings.forEach(h => {
+      if (h.status === "SELL") sellCount++;
+      else if (h.status === "SHIELD") shieldCount++;
+      else holdCount++;
+    });
+
+    document.getElementById("stat-total").innerText = evaluatedHoldings.length;
+    document.getElementById("stat-sell").innerText = sellCount;
+    document.getElementById("stat-shield").innerText = shieldCount;
+    document.getElementById("stat-hold").innerText = holdCount;
+
+    const banner = document.getElementById("action-banner");
+    const bannerTitle = document.getElementById("banner-title");
+    const bannerSub = document.getElementById("banner-sub");
+    const speakBtn = document.getElementById("speak-btn");
+
+    if (sellCount > 0) {
+      banner.className = "banner alert-sell";
+      bannerTitle.innerText = `🚨 ACTION REQUIRED: ${sellCount} Exit Order(s) Triggered`;
+      bannerSub.innerText = "Execute 100% full liquidation orders on qualifying broker accounts.";
+      voiceScript = `Attention: ${sellCount} sell order is triggered today. Please review the highlighted red orders.`;
+    } else {
+      banner.className = "banner alert-hold";
+      bannerTitle.innerText = "✅ SYSTEM STANDBY: 0 Sells Today";
+      bannerSub.innerText = "All active positions remain preserved under the No-Loss and Momentum Shield rules.";
+      voiceScript = "Good morning. There are zero sell orders today. All portfolio positions remain in hold.";
+    }
+    speakBtn.style.display = "inline-flex";
+
+    renderTable();
+  }
+
+  function renderTable() {
+    const tbody = document.getElementById("holdings-table");
+    tbody.innerHTML = "";
+
+    const filtered = evaluatedHoldings.filter(h => {
+      if (currentFilter === "sell") return h.status === "SELL";
+      if (currentFilter === "shield") return h.status === "SHIELD";
+      if (currentFilter === "hold") return h.status === "HOLD";
+      return true;
+    });
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: #8b949e; padding: 24px;">No positions match the selected filter.</td></tr>`;
+      return;
+    }
+
+    filtered.forEach(h => {
+      const tr = document.createElement("tr");
+      const pnlColor = h.gainPct >= 2.0 ? "#4ade80" : (h.gainPct >= 0 ? "#94a3b8" : "#f87171");
+
+      tr.innerHTML = `
+        <td><span class="broker-badge">${h.broker}</span></td>
+        <td><b>${h.symbol}</b></td>
+        <td style="color:#94a3b8;">${h.categoryType}</td>
+        <td>${h.qty.toLocaleString()}</td>
+        <td>₹${h.avgPrice.toFixed(2)}</td>
+        <td>₹${h.ltp > 0 ? h.ltp.toFixed(2) : "—"}</td>
+        <td style="color:${pnlColor}; font-weight:700;">${h.ltp > 0 ? (h.gainPct > 0 ? "+" : "") + h.gainPct.toFixed(2) + "%" : "—"}</td>
+        <td>${h.surge > 0 ? h.surge.toFixed(2) + "x" : "—"}</td>
+        <td>${h.abScore !== 0 ? (h.abScore > 0 ? "+" : "") + h.abScore.toFixed(2) + "%" : "—"}</td>
+        <td>
+          <span class="badge ${h.badgeClass}">${h.status}</span>
+          <div style="font-size: 11px; color: #94a3b8; margin-top: 3px;">${h.directive}</div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function setFilter(filter, btn) {
+    currentFilter = filter;
+    document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    renderTable();
+  }
+
+  function speakSummary() {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(voiceScript);
+    utt.lang = 'en-IN';
+    utt.rate = 0.9;
+    window.speechSynthesis.speak(utt);
+  }
+</script>
+</body>
+</html>
