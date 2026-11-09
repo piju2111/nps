@@ -240,14 +240,14 @@
     <div id="top-category" class="details">Connecting to Google Sheet...</div>
     <div id="top-price" class="price">—</div>
 
-    <button id="speak-btn" class="speaker-btn" onclick="speakAllTop5()" disabled>
-      🔊 <span>Listen to Top 5</span>
+    <button id="speak-btn" class="speaker-btn" onclick="speakAllTop8()" disabled>
+      🔊 <span>Listen to Top 8</span>
     </button>
   </div>
 
   <!-- Big Table for Low Vision -->
   <div class="card">
-    <div class="table-title">Top 5 Eligible ETFs</div>
+    <div class="table-title">Top 8 Eligible ETFs</div>
     <table>
       <thead>
         <tr>
@@ -267,7 +267,7 @@
   </div>
 
   <div class="footer">
-    Rules: Turnover &ge; ₹1.00 Cr | Zone A (-3.0% to +3.0%) | Turnover Surge &gt; 1.0 (Mandatory)
+    Rules: Turnover &ge; ₹1.00 Cr | Zone A (-3.0% to +3.0%) | Turnover Surge &gt; 1.0 (Mandatory) | Sorted by Highest Turnover First
   </div>
 </div>
 
@@ -454,8 +454,8 @@
       return;
     }
 
-    // Sort ascending by AB score (mean-reversion closest to -3% / 20 SMA base first)
-    qualified.sort((a, b) => a.abScore - b.abScore);
+    // Sort descending by SMA20 Turnover (Highest liquidity / biggest turnover first)
+    qualified.sort((a, b) => b.sma20TO - a.sma20TO);
 
     displayResults(qualified);
   }
@@ -463,27 +463,28 @@
   function displayResults(list) {
     const top = list[0];
     document.getElementById("top-ticker").innerText = top.symbol;
-    document.getElementById("top-category").innerText = `${top.category} (Surge: ${top.surge.toFixed(2)}x)`;
+    document.getElementById("top-category").innerText = `${top.category} (SMA20 TO: ₹${top.sma20TO.toFixed(2)} Cr | Surge: ${top.surge.toFixed(2)}x)`;
     document.getElementById("top-price").innerText = `Price: ₹${top.ltp.toFixed(2)}`;
 
-    const top5 = list.slice(0, 5);
+    // Take up to 8 qualified ETFs
+    const top8 = list.slice(0, 8);
     const spokenTopName = cleanTickerPronunciation(top.symbol);
 
-    let speechParts = [`Today's top buy recommendation is ${spokenTopName} at ${Math.round(top.ltp)} rupees, with volume surge ${top.surge.toFixed(2)}. Here are all qualified ETFs. `];
+    let speechParts = [`Today's top buy recommendation by turnover is ${spokenTopName} at ${Math.round(top.ltp)} rupees, with turnover ${top.sma20TO.toFixed(1)} crore and volume surge ${top.surge.toFixed(2)}. Here are the top qualified ETFs. `];
 
-    top5.forEach((item, index) => {
+    top8.forEach((item, index) => {
       const spokenName = cleanTickerPronunciation(item.symbol);
       const spokenAb = item.abScore < 0 
         ? `negative ${Math.abs(item.abScore).toFixed(1)} percent` 
         : `positive ${item.abScore.toFixed(1)} percent`;
-      speechParts.push(`Number ${index + 1}, ${spokenName}, price ${Math.round(item.ltp)} rupees, volume surge ${item.surge.toFixed(2)}, momentum score ${spokenAb}. `);
+      speechParts.push(`Number ${index + 1}, ${spokenName}, price ${Math.round(item.ltp)} rupees, turnover ${item.sma20TO.toFixed(1)} crore, volume surge ${item.surge.toFixed(2)}. `);
     });
 
     voiceAnnouncementText = speechParts.join(" ");
     document.getElementById("speak-btn").disabled = false;
 
     let tableHtml = "";
-    top5.forEach((item, index) => {
+    top8.forEach((item, index) => {
       const formattedAb = (item.abScore > 0 ? "+" : "") + item.abScore.toFixed(2) + "%";
       tableHtml += `
         <tr>
@@ -513,7 +514,7 @@
     voiceAnnouncementText = "Today there is no buy signal. No ETF qualified under liquidity, Zone A, and surge rules.";
   }
 
-  function speakAllTop5() {
+  function speakAllTop8() {
     if (!('speechSynthesis' in window)) {
       alert("Text-to-speech is not supported by your browser.");
       return;
